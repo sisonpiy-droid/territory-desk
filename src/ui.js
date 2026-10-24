@@ -698,5 +698,8 @@ document.addEventListener('change', function (e) {
 }); });
 
 render();
-window.__desk = { S: S, E: E, ask: ask, load: load, rerender: render, recompute: recompute, getApp: getApp, esc: esc, pill: pill, pushUndo: pushUndo, getRun: function () { return S.run; } };
+window.__desk = { S: S, E: E, ask: ask, load: load, rerender: render, recompute: recompute, getApp: getApp, esc: esc, pill: pill, pushUndo: pushUndo, getRun: function () { return S.run; },
+  // used by src/ext/understand.js to read follow-ups more broadly and apply several changes at once
+  answer: answer, findIds: findIds, findTers: findTers, parseFields: parseFields, parseTerritoryChange: parseTerritoryChange,
+  applyAppFields: applyAppFields, diffHtml: diffHtml, explainCard: explainCard };
 })();
