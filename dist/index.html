@@ -644,7 +644,7 @@ function evaluateApp(a, ctx) {
 /* Allocation: one store per pin, slots per territory                  */
 /* ------------------------------------------------------------------ */
 function cmp(A, B) {
-  return (B.ev.score - A.ev.score) || ((B.a.exp || 0) - (A.a.exp || 0)) || ((B.a.invest || 0) - (A.a.invest || 0)) || (A.a.id < B.a.id ? -1 : 1);
+  return ((B.forced ? 1 : 0) - (A.forced ? 1 : 0)) || (B.ev.score - A.ev.score) || ((B.a.exp || 0) - (A.a.exp || 0)) || ((B.a.invest || 0) - (A.a.invest || 0)) || (A.a.id < B.a.id ? -1 : 1);
 }
 
 function core(apps, territories, stores, cfg) {
@@ -653,7 +653,26 @@ function core(apps, territories, stores, cfg) {
   var evals = {}, res = {};
   live.forEach(function (a) { evals[a.id] = evaluateApp(a, ctx); });
 
-  var ready = live.filter(function (a) { return evals[a.id].level === 'ready'; }).map(function (a) { return { a: a, ev: evals[a.id] }; });
+  // Human overrides (a.override = { to, reason, at }), oldest first. An approval override goes first in allocation,
+  // but is refused if it would put a store on a pin with a store, outside every territory, on a pin another
+  // override already holds, or into a territory whose slots are all held by overrides.
+  var ovr = {}, heldPins = {}, heldSlots = {};
+  live.filter(function (a) { return a.override; }).sort(function (a, b) { return (a.override.at || 0) - (b.override.at || 0); }).forEach(function (a) {
+    var o = a.override, ev = evals[a.id], why = '';
+    if (o.to === 'Approve') {
+      if (ev.level === 'reject' && ev.issues.some(function (i) { return i.code === 'NO_TERRITORY'; })) why = 'the brand has no territory in ' + a.city;
+      else if (!/^\d{6}$/.test(a.pin || '') || !ev.ter) why = 'pin ' + (a.pin || '(blank)') + ' is not in any expansion territory, so there is no slot to give';
+      else if (ctx.storeByPin[a.pin]) why = ctx.storeByPin[a.pin].id + ' already operates in pin ' + a.pin + ', and the brand never opens two stores in one pin code';
+      else if (heldPins[a.pin]) why = heldPins[a.pin] + ' already holds pin ' + a.pin + ' by override, and the brand never opens two stores in one pin code';
+      else if ((heldSlots[ev.ter.id] || 0) >= ev.ter.slots) why = 'every open slot in ' + ev.ter.id + ' (' + ev.ter.slots + ') is already held by an override';
+      if (!why) { heldPins[a.pin] = a.id; heldSlots[ev.ter.id] = (heldSlots[ev.ter.id] || 0) + 1; }
+    }
+    ovr[a.id] = { to: o.to, reason: o.reason || '', at: o.at || 0, applied: !why, refused: why };
+  });
+  var forcedTo = function (id) { return ovr[id] && ovr[id].applied ? ovr[id].to : null; };
+
+  var ready = live.filter(function (a) { var f = forcedTo(a.id); return f ? f === 'Approve' : evals[a.id].level === 'ready'; })
+    .map(function (a) { return { a: a, ev: evals[a.id], forced: forcedTo(a.id) === 'Approve' }; });
   var byPin = {};
   ready.forEach(function (x) { (byPin[x.a.pin] = byPin[x.a.pin] || []).push(x); });
   var pinWinners = [];
@@ -689,10 +708,17 @@ function core(apps, territories, stores, cfg) {
   live.forEach(function (a) {
     var ev = evals[a.id], oc = outcome[a.id];
     var r = { id: a.id, score: ev.score, parts: ev.parts, issues: ev.issues, tier: ev.tier, ter: ev.ter, conditions: ev.conditions, feasible: ev.feasible };
-    if (ev.level === 'reject') r.outcome = 'Reject';
+    var f = forcedTo(a.id);
+    if (ovr[a.id]) r.override = ovr[a.id];
+    if (f && f !== 'Approve') { r.outcome = f; if (f === 'Waitlist') r.waitReason = 'override'; }
+    else if (f === 'Approve') {
+      r.outcome = oc.o;
+      ev.issues.filter(function (i) { return i.level === 'hold' || i.level === 'reject'; }).forEach(function (i) { r.conditions = r.conditions.concat('Resolve before signing (approved by override): ' + i.title.toLowerCase()); });
+    }
+    else if (ev.level === 'reject') r.outcome = 'Reject';
     else if (ev.level === 'hold') r.outcome = 'Hold';
     else r.outcome = oc.o;
-    if (r.outcome === 'Approve' || r.outcome === 'Waitlist') {
+    if ((r.outcome === 'Approve' || r.outcome === 'Waitlist') && outcome[a.id]) {
       var x = ready.filter(function (y) { return y.a.id === a.id; })[0];
       r.rankPin = x.rankPin; r.pinN = x.pinN; r.rankTer = x.rankTer || null; r.terN = x.terN || null;
       r.pinRivals = x.pinGroup.filter(function (y) { return y.a.id !== a.id; }).map(function (y) { return y.a.id; });
@@ -786,21 +812,30 @@ function strengths(r) {
 
 function explain(r, a, state) {
   var cfg = state.cfg, out = { headline: '', lines: [], next: [] };
-  var t = r.ter;
+  var t = r.ter, ov = r.override;
+  var OVL = { Approve: 'approval', Waitlist: 'waitlist', Hold: 'hold', Reject: 'rejection' };
+  if (ov && ov.applied && ov.to !== 'Approve') {
+    out.headline = { Waitlist: 'Waitlisted', Hold: 'On hold', Reject: 'Not taken forward' }[ov.to] + ' by override';
+    out.lines.push('The expansion team overrode the standard decision. Reason given: ' + (ov.reason || 'none') + '.');
+    r.issues.filter(function (i) { return i.level !== 'info'; }).forEach(function (i) { out.lines.push('Note: ' + i.detail); });
+    out.next.push('Remove the override to return to the standard decision.');
+    out.short = out.headline + ': ' + (ov.reason || 'no reason given');
+    return out;
+  }
   if (r.outcome === 'Approve') {
-    out.headline = 'Approved for pin ' + a.pin + (t ? ' in ' + t.id + ' (' + a.city + ', ' + t.tier + ', ' + t.priority + ' priority)' : '');
+    out.headline = (ov && ov.applied ? 'Approved by override' : 'Approved') + ' for pin ' + a.pin + (t ? ' in ' + t.id + ' (' + a.city + ', ' + t.tier + ', ' + t.priority + ' priority)' : '');
     var st = strengths(r).slice(0, 2).map(function (s) { return s.p.label.toLowerCase() + ' (' + s.p.note + ')'; });
     out.lines.push('Score ' + r.score + ' out of 100. Strongest points: ' + st.join('; ') + '.');
-    if (r.pinN > 1) out.lines.push('Won pin ' + a.pin + ' against ' + r.pinRivals.join(', ') + (r.margin !== undefined ? ' by ' + r.margin + ' points.' : '.'));
-    if (r.terN) out.lines.push('Took one of ' + t.slots + ' open slot' + (t.slots === 1 ? '' : 's') + ' in ' + t.id + (r.nextRival ? '; the next in line is ' + r.nextRival + ' (' + r.margin + ' points behind).' : '.'));
+    if (r.pinN > 1) out.lines.push('Won pin ' + a.pin + ' against ' + r.pinRivals.join(', ') + (r.margin < 0 ? ' by override.' : r.margin !== undefined ? ' by ' + r.margin + ' points.' : '.'));
+    if (r.terN) out.lines.push('Took one of ' + t.slots + ' open slot' + (t.slots === 1 ? '' : 's') + ' in ' + t.id + (r.nextRival ? '; the next in line is ' + r.nextRival + (r.margin < 0 ? '.' : ' (' + r.margin + ' points behind).') : '.'));
     if (r.conditions.length) out.lines.push('Conditions to clear: ' + r.conditions.join('; ') + '.');
   } else if (r.outcome === 'Waitlist') {
     out.headline = 'Eligible, but waitlisted';
     if (r.waitReason === 'pin_lost') {
-      out.lines.push('Scores ' + r.score + ', but pin ' + a.pin + ' goes to ' + r.winner + ' (' + r.margin + ' points ahead). The brand opens one store per pin code.');
+      out.lines.push('Scores ' + r.score + ', but pin ' + a.pin + ' goes to ' + r.winner + (r.margin < 0 ? ' (approved by override)' : ' (' + r.margin + ' points ahead)') + '. The brand opens one store per pin code.');
       out.next.push('Moves up if ' + r.winner + ' drops out or fails verification.');
     } else {
-      out.lines.push('Best applicant for pin ' + a.pin + ' (score ' + r.score + '), but ' + t.id + ' has only ' + t.slots + ' open slot' + (t.slots === 1 ? '' : 's') + ', taken by ' + (r.beatenBy || []).join(', ') + ' with higher scores' + (r.margin ? ' (' + r.margin + ' points ahead at the cut-off).' : '.'));
+      out.lines.push('Best applicant for pin ' + a.pin + ' (score ' + r.score + '), but ' + t.id + ' has only ' + t.slots + ' open slot' + (t.slots === 1 ? '' : 's') + ', taken by ' + (r.beatenBy || []).join(', ') + (r.margin < 0 ? ', at least one by override.' : ' with higher scores' + (r.margin ? ' (' + r.margin + ' points ahead at the cut-off).' : '.')));
       out.next.push('Promoted if a slot opens in ' + t.id + ' or one of those applicants drops out.');
     }
     if (r.alternatives && r.alternatives.length) out.next.push('Open alternative' + (r.alternatives.length > 1 ? 's' : '') + ' in ' + a.city + ': ' + r.alternatives.map(function (p) { return p.pin + ' (' + p.ter + ')'; }).join(', ') + ' (needs a space there).');
@@ -827,10 +862,12 @@ function explain(r, a, state) {
     out.next.push('Keep on file and re-contact if the situation changes (for example, more capital or a new territory opening).');
   }
   r.issues.filter(function (i) { return i.level === 'soft' || i.level === 'info'; }).forEach(function (i) { out.lines.push('Note: ' + i.detail); });
+  if (ov && ov.applied) out.lines.unshift('The expansion team approved this by override. Reason given: ' + (ov.reason || 'none') + '. It goes first for pin ' + a.pin + ' and a slot in ' + (t ? t.id : 'its territory') + '.');
+  if (ov && !ov.applied) out.lines.unshift('An override to ' + OVL[ov.to] + ' was refused: ' + ov.refused + '. The standard decision stands.');
   if (r.outcome === 'Approve') {
-    out.short = 'Takes pin ' + a.pin + (t ? ' in ' + t.id : '') + (r.pinN > 1 ? ', ahead of ' + r.pinRivals.join(', ') + ' by ' + r.margin : r.nextRival ? ', ' + r.margin + ' ahead of ' + r.nextRival : '') + (r.conditions.length ? '; ' + r.conditions.length + ' condition' + (r.conditions.length > 1 ? 's' : '') : '');
+    out.short = (ov && ov.applied ? 'By override: ' : '') + 'Takes pin ' + a.pin + (t ? ' in ' + t.id : '') + (r.pinN > 1 ? ', ahead of ' + r.pinRivals.join(', ') + (r.margin < 0 ? '' : ' by ' + r.margin) : r.nextRival && r.margin >= 0 ? ', ' + r.margin + ' ahead of ' + r.nextRival : '') + (r.conditions.length ? '; ' + r.conditions.length + ' condition' + (r.conditions.length > 1 ? 's' : '') : '');
   } else if (r.outcome === 'Waitlist') {
-    out.short = r.waitReason === 'pin_lost' ? 'Pin ' + a.pin + ' goes to ' + r.winner + ' (' + r.margin + ' points ahead)' : t.id + ' is full; ' + r.margin + ' points under the cut-off';
+    out.short = r.waitReason === 'pin_lost' ? 'Pin ' + a.pin + ' goes to ' + r.winner + (r.margin < 0 ? ' by override' : ' (' + r.margin + ' points ahead)') : t.id + ' is full' + (r.margin < 0 ? ' (override)' : '; ' + r.margin + ' points under the cut-off');
   } else out.short = out.headline;
   return out;
 }
@@ -924,11 +961,11 @@ function letter(r, a, lang, cfg) {
     var asks = r.issues.filter(function (i) { return i.level === 'hold' && ASK[i.code]; }).map(function (i) {
       return fill(ASK[i.code][L], { min: cfg.minSpace, need: i.need || '' });
     });
-    m.ask = asks.join(L === 'en' ? '; ' : '; ');
+    m.ask = asks.join('; ') || { en: 'a short call with our team to complete a few checks', hi: 'हमारी टीम के साथ एक छोटी कॉल, ताकि कुछ जाँच पूरी हो सकें', kn: 'ಕೆಲವು ಪರಿಶೀಲನೆಗಳನ್ನು ಪೂರ್ಣಗೊಳಿಸಲು ನಮ್ಮ ತಂಡದೊಂದಿಗೆ ಒಂದು ಸಣ್ಣ ಕರೆ' }[L];
   }
   if (r.outcome === 'Reject') {
     var rj = r.issues.filter(function (i) { return i.level === 'reject'; })[0];
-    m.why = rj && REJECT_WHY[rj.code] ? REJECT_WHY[rj.code][L] : '';
+    m.why = rj && REJECT_WHY[rj.code] ? REJECT_WHY[rj.code][L] : { en: 'it does not fit our current expansion plan', hi: 'यह हमारी मौजूदा विस्तार योजना में फ़िट नहीं बैठता', kn: 'ಇದು ನಮ್ಮ ಪ್ರಸ್ತುತ ವಿಸ್ತರಣಾ ಯೋಜನೆಗೆ ಹೊಂದುತ್ತಿಲ್ಲ' }[L];
   }
   var tpl = T[r.outcome];
   if (!tpl) return '';
@@ -1186,7 +1223,7 @@ function track(S, ev, now) {
 }
 function median(xs) { if (!xs.length) return null; var s = xs.slice().sort(function (a, b) { return a - b; }), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
 function adoption(S, ev) {
-  var L = live(S), decided = L.length, overrides = (S.overrides || []).length;
+  var L = live(S), decided = L.length, overrides = L.filter(function (a) { var o = S.run.res[a.id].override; return o && o.applied; }).length;
   var slots = 0, filled = 0; S.ters.forEach(function (t) { slots += t.slots; filled += Math.min(t.slots, S.run.approvedByTer[t.id] || 0); });
   var inPref = ev.copies.filter(function (c) { return c.lang === c.pref; }).length;
   var withPref = L.filter(function (a) { return a.lang; }).length;
@@ -1206,6 +1243,132 @@ root.DeskOps = api;
 
 </script>
 <script>
+/* modules\plan.js */
+// Backward planning for approved partners: from the target launch back to the latest signing date,
+// with an owner and a due date for every step, and the stage each partner has reached.
+// Pure functions; dates are passed in so tests are repeatable. Target launch is months from the upload date (anchor);
+// overdue steps are judged against now.
+(function (root) {
+'use strict';
+var DAY = 86400000, MONTH_DAYS = 30.44;
+var STAGES = ['Approved', 'Documents verified', 'Agreement signed', 'Fit-out', 'Training', 'Ready to open', 'Open'];
+var OWNERS = ['Expansion team', 'Partner', 'Training team', 'Fit-out vendor'];
+
+// days before opening each step is due (based on the 10-week default; capped at the signing date when the lead time is shorter).
+// done: the stage index at which the step counts as done
+function stepList(a, cfg, firstTimer, lang) {
+  var E = cfg.earliestWeeks, extra = a.space === 'Not yet identified' ? cfg.noSpaceExtraWeeks : 0;
+  var sign = (E - 1 + extra) * 7;
+  var cap = function (d) { return Math.min(d, sign); };
+  return [
+    { key: 'kyc', title: 'Verify KYC, proof of funds and space documents', owner: 'Expansion team', before: sign + 3, done: 1 },
+    { key: 'sign', title: 'Sign the franchise agreement', owner: 'Partner', before: sign, done: 2 },
+    { key: 'site', title: 'Site visit; layout and signage approved', owner: 'Expansion team', before: cap(sign - 7), done: 3 },
+    { key: 'fitout', title: 'Fit-out complete', owner: 'Fit-out vendor', before: cap(28), done: 4 },
+    { key: 'licence', title: 'Shop licence and GST registration in hand', owner: 'Partner', before: cap(28), done: 4 },
+    { key: 'train', title: (firstTimer ? 'Extended 3-week' : 'Express 1-week') + ' training in ' + lang + ' complete', owner: 'Training team', before: cap(firstTimer ? 21 : 28), done: 5 },
+    { key: 'pos', title: 'First stock delivered; billing and stock system live', owner: 'Expansion team', before: cap(14), done: 5 },
+    { key: 'dry', title: 'Mock sales day with the area manager', owner: 'Training team', before: cap(7), done: 5 },
+    { key: 'open', title: 'Store opens', owner: 'Partner', before: 0, done: 6 }
+  ];
+}
+
+function day(d) { d = new Date(d); d.setHours(0, 0, 0, 0); return d.getTime(); }
+function plan(a, r, cfg, anchor, stage, now) {
+  stage = stage || 0;
+  var t0 = day(anchor), tn = day(now || anchor), E = cfg.earliestWeeks, extra = a.space === 'Not yet identified' ? cfg.noSpaceExtraWeeks : 0;
+  var earliest = t0 + (E + extra) * 7 * DAY;
+  var target = a.launch == null ? null : t0 + Math.round(a.launch * MONTH_DAYS) * DAY;
+  var open, basis, risks = [];
+  if (target == null) { open = earliest; basis = 'No target given, so planned to the earliest realistic opening.'; }
+  else if (target >= earliest) { open = target; basis = 'Planned back from the target of ' + a.launch + ' month' + (a.launch === 1 ? '' : 's') + '.'; }
+  else {
+    open = earliest; basis = 'Target of ' + a.launch + ' month' + (a.launch === 1 ? '' : 's') + ' is earlier than the earliest realistic opening, so planned to that instead.';
+    risks.push('Target launch cannot be met');
+  }
+  var firstTimer = (a.exp || 0) < cfg.firstTimerYears;
+  var steps = stepList(a, cfg, firstTimer, a.lang || 'English').map(function (s) {
+    var due = open - s.before * DAY, done = stage >= s.done;
+    return { key: s.key, title: s.title, owner: s.owner, due: new Date(due), done: done, overdue: !done && due < tn };
+  });
+  var signStep = steps.filter(function (s) { return s.key === 'sign'; })[0];
+  var slack = Math.round((signStep.due.getTime() - (Math.max(t0, tn) + 7 * DAY)) / DAY);   // a week to verify documents before signing
+  if (!signStep.done && slack < 0) risks.push('Less than a week left to verify and sign');
+  var overdue = steps.filter(function (s) { return s.overdue; });
+  if (overdue.length) risks.push(overdue.length + ' step' + (overdue.length > 1 ? 's' : '') + ' overdue');
+  var next = steps.filter(function (s) { return !s.done; })[0] || null;
+  return { id: a.id, open: new Date(open), target: target == null ? null : new Date(target), latestSign: signStep.due, slackDays: slack,
+           basis: basis, steps: steps, next: next, stage: stage, atRisk: risks.length > 0, risks: risks, conditions: r.conditions };
+}
+
+function plans(S, now) {
+  return S.apps.filter(function (a) { return !a.withdrawn && S.run.res[a.id] && S.run.res[a.id].outcome === 'Approve'; })
+    .map(function (a) { return plan(a, S.run.res[a.id], S.cfg, S.loadedAt || now, (S.stages || {})[a.id] || 0, now); })
+    .sort(function (p, q) { return (q.atRisk - p.atRisk) || (p.latestSign - q.latestSign) || (p.id < q.id ? -1 : 1); });
+}
+
+var api = { STAGES: STAGES, OWNERS: OWNERS, plan: plan, plans: plans };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.DeskPlan = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* modules\triggers.js */
+// For every held or waitlisted application: the events that would make the desk decide it again, and what would happen.
+(function (root) {
+'use strict';
+var TRIG = {
+  NO_SPACE: 'The applicant reports a shop space (size and floor)',
+  SIZE_MISSING: 'The applicant sends the size of the space',
+  SIZE_SMALL: 'The applicant moves to a space of at least {min} sq ft',
+  FLOOR_UPPER: 'The applicant moves to a ground-floor or mall space',
+  INVEST_GAP: 'Proof of Rs {need} lakh arrives, or a co-investor joins',
+  INVEST_MISSING: 'The applicant sends an investment figure',
+  NOTES_CONFLICT: 'The applicant confirms whether the form or the notes are right',
+  PIN_BAD: 'The applicant corrects the pin code',
+  PIN_MISMATCH: 'The applicant corrects the pin code or the city',
+  CITY_UNKNOWN: 'The applicant corrects the city',
+  PIN_HAS_STORE: 'The applicant names a pin without a store',
+  PIN_OUTSIDE: 'The applicant names a pin inside a territory, or a territory adds pin {pin}'
+};
+function fill(s, m) { return s.replace(/\{(\w+)\}/g, function (_, k) { return m[k] != null ? m[k] : ''; }); }
+
+function triggers(S) {
+  var out = {};
+  S.apps.forEach(function (a) {
+    var r = S.run.res[a.id]; if (a.withdrawn || !r) return;
+    if (r.outcome !== 'Hold' && r.outcome !== 'Waitlist') return;
+    var ev = [], then = '';
+    if (r.override && r.override.applied) ev.push('The expansion team removes the override');
+    else if (r.outcome === 'Hold') {
+      r.issues.filter(function (i) { return i.level === 'hold'; }).forEach(function (i) {
+        var t = TRIG[i.code]; if (t && ev.indexOf(fill(t, { min: S.cfg.minSpace, need: i.need, pin: a.pin })) < 0) ev.push(fill(t, { min: S.cfg.minSpace, need: i.need, pin: a.pin }));
+      });
+      var f = r.ifFixed;
+      if (f && f.possible) then = f.outcome === 'Approve' ? 'Approved' + (f.pin && f.pin !== a.pin ? ' on pin ' + f.pin : '') : f.outcome === 'Waitlist' ? 'Waitlisted' + (f.winner ? ' behind ' + f.winner : f.beatenBy ? ' behind ' + f.beatenBy.join(', ') : '') : 'Still on hold';
+      else if (f && f.why === 'no_free_pin') then = 'Waitlisted: no open pin is left in ' + a.city;
+      else if (f) then = 'Decided again once the pin code or city is corrected';
+    } else if (r.waitReason === 'pin_lost') {
+      ev.push(r.winner + ' withdraws, fails verification or moves to another pin');
+      then = 'Approved on pin ' + a.pin;
+    } else if (r.waitReason === 'territory_full') {
+      ev.push('A slot is added in ' + r.ter.id + ', or ' + (r.beatenBy || []).join(' or ') + ' drops out');
+      then = 'Approved on pin ' + a.pin;
+    }
+    if (r.alternatives && r.alternatives.length && !(r.override && r.override.applied)) ev.push('The applicant accepts open pin ' + r.alternatives.map(function (p) { return p.pin; }).join(' or '));
+    out[a.id] = { id: a.id, outcome: r.outcome, events: ev, then: then };
+  });
+  return out;
+}
+
+var api = { triggers: triggers };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.DeskTriggers = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
 /* ui.js */
 (function () {
 'use strict';
@@ -1218,7 +1381,7 @@ var OUT_CLASS = { Approve: 'ok', Waitlist: 'wait', Hold: 'hold', Reject: 'no', W
 
 // Extension points so new features can live in their own files (src/modules/*.js load before this file, src/ext/*.js after it)
 window.DeskExt = window.DeskExt || {};
-['afterSummary', 'tabs', 'afterRender', 'answerers'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
+['afterSummary', 'tabs', 'afterRender', 'answerers', 'afterDetail', 'afterRecompute', 'exportSheets'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
 function extHtml() {
   return window.DeskExt.afterSummary.map(function (fn) { try { return fn(S) || ''; } catch (e) { return '<p class="muted pad">A section failed to load: ' + esc(e.message) + '</p>'; } }).join('');
 }
@@ -1285,6 +1448,8 @@ function recompute(first) {
   }
   S.changed = {};
   diff.forEach(function (d) { S.changed[d.id] = d.from; });
+  // S.cause says what triggered this ({ kind, text }); set by whoever changed the data
+  window.DeskExt.afterRecompute.forEach(function (fn) { try { fn(diff, !!first || !before, S.cause || null); } catch (e) { console.error(e); } });
   return diff;
 }
 function snapshot() {
@@ -1425,7 +1590,8 @@ function detailHtml(a, r, x) {
   var rec = [['Investment', a.invest === null ? 'not given' : 'Rs ' + a.invest + ' lakh'], ['Experience', a.exp === null ? 'not given' : a.exp + ' yrs'], ['Business', a.biz || 'not given'],
     ['Space', a.space + (a.size !== null ? ', ' + a.size + ' sq ft' : '') + ', ' + a.floor.toLowerCase()], ['Target launch', a.launch === null ? 'not given' : a.launch + ' months'], ['Training language', a.lang || 'not given'], ['Notes', a.notes || 'none']]
     .map(function (z) { return '<dt>' + z[0] + '</dt><dd>' + esc(z[1]) + '</dd>'; }).join('');
-  return '<div class="detail"><div class="dcol"><h4>Why</h4>' + why + next + plan + '</div>' +
+  var ext = window.DeskExt.afterDetail.map(function (fn) { try { return fn(a, r, S) || ''; } catch (e) { return ''; } }).join('');
+  return '<div class="detail"><div class="dcol"><h4>Why</h4>' + why + next + plan + ext + '</div>' +
     '<div class="dcol"><h4>' + (r.outcome === 'Hold' || r.outcome === 'Reject' ? 'Indicative score (not ranked)' : 'Score out of 100') + '</h4>' + bars +
     '<h4>Data flags</h4><ul class="flags">' + flags + '</ul>' +
     '<h4>Message to the applicant</h4><div class="seg-g">' + langs + '</div><p class="letter" lang="' + (lang === 'Hindi' ? 'hi' : lang === 'Kannada' ? 'kn' : 'en') + '">' + esc(msg) + '</p>' +
@@ -1767,7 +1933,8 @@ function doUndo(fromChat) {
   var u = S.undo.pop();
   if (!u) return fromChat ? '<p>Nothing to undo.</p>' : '';
   S.apps = u.apps; S.ters = u.ters; S.cfg = u.cfg;
-  var diff = recompute(); render();
+  var c0 = S.cause; S.cause = { kind: 'Undo', text: 'Last change undone' };
+  var diff = recompute(); S.cause = c0; render();
   return fromChat ? '<p class="ap">Last change undone.</p>' + diffHtml(diff) : '';
 }
 
@@ -1775,7 +1942,9 @@ function ask(text) {
   text = String(text || '').trim(); if (!text) return;
   S.askLog.push({ who: 'me', text: text });
   var html;
+  S.cause = { kind: /what if/i.test(text) ? 'What-if' : 'New information', text: text };
   try { html = answer(text); } catch (e) { html = '<p>Something went wrong reading that: ' + esc(e.message) + '</p>'; }
+  S.cause = null;
   S.askLog.push({ who: 'desk', html: html });
   var asideEl = $('#ask'); if (asideEl) asideEl.innerHTML = askHtml();
   scrollAskToEnd();
@@ -1833,6 +2002,7 @@ function exportDecisions() {
     brows.push([t.id, t.city, t.tier, t.priority, t.slots, Math.min(t.slots, S.run.approvedByTer[t.id] || 0), p, st ? 'Locked: ' + st.id : ap ? 'Approved: ' + ap : 'Open']);
   }); });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(brows), 'Pin board');
+  window.DeskExt.exportSheets.forEach(function (fn) { try { var sh = fn(S); if (sh) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sh.rows), sh.name); } catch (e) { console.error(e); } });
   XLSX.writeFile(wb, 'franchise-decisions.xlsx');
 }
 
@@ -1867,8 +2037,8 @@ document.addEventListener('click', function (e) {
     case 'ask': { var i = $('#askin'); ask(i.value); break; }
     case 'sugg': ask(v); break;
     case 'undo': doUndo(false); break;
-    case 'reset-data': if (S.run && S.initial) { pushUndo(); S.apps = E.clone(S.initial.apps); S.ters = E.clone(S.initial.ters); recompute(); render(); } break;
-    case 'reset-cfg': pushUndo(); S.cfg = E.clone(E.DEFAULT_CFG); recompute(); render(); break;
+    case 'reset-data': if (S.run && S.initial) { pushUndo(); S.apps = E.clone(S.initial.apps); S.ters = E.clone(S.initial.ters); S.cause = { kind: 'Restore', text: 'Uploaded data restored' }; recompute(); S.cause = null; render(); } break;
+    case 'reset-cfg': pushUndo(); S.cfg = E.clone(E.DEFAULT_CFG); S.cause = { kind: 'Assumption', text: 'Default assumptions restored' }; recompute(); S.cause = null; render(); break;
     case 'drop-example-app': S.apps = S.apps.filter(function (a) { return !a.templateExample; }); S.notices = S.notices.filter(function (n) { return n.indexOf('drop-example-app') < 0; }); recompute(); render(); break;
     case 'drop-example-ter': S.ters = S.ters.filter(function (t) { return !t.templateExample; }); S.notices = S.notices.filter(function (n) { return n.indexOf('drop-example-ter') < 0; }); recompute(); render(); break;
   }
@@ -1885,7 +2055,8 @@ document.addEventListener('change', function (e) {
     var val = parseFloat(e.target.value); if (isNaN(val)) return;
     if (p === 'rejectRatio') val = val / 100;
     pushUndo(); setPath(S.cfg, p, val);
-    var diff = recompute(); render();
+    S.cause = { kind: 'Assumption', text: p + ' set to ' + e.target.value };
+    var diff = recompute(); S.cause = null; render();
     S.tab = 'assume'; render();
     S.askLog.push({ who: 'desk', html: '<p class="ap">Assumption changed (' + esc(p) + ' = ' + esc(e.target.value) + ').</p><p><b>What changed</b></p>' + diffHtml(diff) });
     var asideEl = $('#ask'); if (asideEl) asideEl.innerHTML = askHtml(); scrollAskToEnd();
@@ -1899,6 +2070,222 @@ document.addEventListener('change', function (e) {
 
 render();
 window.__desk = { S: S, E: E, ask: ask, load: load, rerender: render, recompute: recompute, getApp: getApp, esc: esc, pill: pill, pushUndo: pushUndo, getRun: function () { return S.run; } };
+})();
+
+</script>
+<script>
+/* ext\followthrough.js */
+// Phase 2: overrides with a reason, backward onboarding plans and a stage board, the decision log, re-run triggers.
+// Logic lives in engine.js (overrides in allocation), src/modules/plan.js and src/modules/triggers.js.
+(function () {
+'use strict';
+var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, P = window.DeskPlan, TR = window.DeskTriggers;
+var OUTS = ['Approve', 'Waitlist', 'Hold', 'Reject'];
+S.log = []; S.stages = {};
+
+function fmt(d) { return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); }
+function fmtT(d) { return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+function appLink(id) { return '<button class="link" data-act="open-app" data-v="' + esc(id) + '">' + esc(id) + '</button>'; }
+function short(id) { var a = D.getApp(id), r = S.run.res[id]; return a && r ? E.explain(r, a, { cfg: S.cfg, run: S.run }).short || '' : ''; }
+function log(e) { e.at = new Date(); S.log.push(e); }
+
+/* ---------- decision log: every decision, override, what-if and change ---------- */
+window.DeskExt.afterRecompute.push(function (diff, first, cause) {
+  if (first) {
+    S.log = []; S.stages = {}; S.loadedAt = new Date();
+    var n = S.apps.filter(function (a) { return !a.withdrawn; }).length;
+    log({ kind: 'Upload', text: 'Decided ' + n + ' applications' + (S.label ? ' from ' + S.label : '') });
+    S.apps.forEach(function (a) { var r = S.run.res[a.id]; if (r) log({ kind: 'Decision', id: a.id, to: r.outcome, text: short(a.id) }); });
+    return;
+  }
+  log({ kind: cause ? cause.kind : 'Change', text: (cause ? cause.text : 'Data updated') + (diff.length ? '' : ' (no decision changed)') });
+  diff.forEach(function (d) { log({ kind: 'Decision', id: d.id, from: d.from, to: d.to, text: d.to === 'Withdrawn' ? 'Withdrawn by applicant' : d.note || short(d.id) }); });
+});
+
+/* ---------- overrides ---------- */
+function setOverride(id, to, reason) {
+  var a = D.getApp(id); if (!a) return '<p>I cannot find ' + esc(id) + ' in this file.</p>';
+  D.pushUndo();
+  var prev = a.override;
+  a.override = to ? { to: to, reason: reason, at: Date.now() } : null;
+  S.cause = { kind: 'Override', text: to ? id + ' set to ' + to + ': ' + reason : 'Override removed from ' + id + (prev ? ' (was ' + prev.to + ')' : '') };
+  var diff = D.recompute(); S.cause = null;
+  var r = S.run.res[id], msg;
+  if (to && r.override && !r.override.applied) {
+    msg = '<p class="ap"><b>Override refused for ' + esc(id) + '.</b> ' + esc(r.override.refused.charAt(0).toUpperCase() + r.override.refused.slice(1)) + '. The decision stays ' + pill(r.outcome, true) + '. The override is kept on record and takes effect if that changes.</p>';
+    log({ kind: 'Override refused', id: id, text: r.override.refused });
+  } else msg = '<p class="ap">' + (to ? 'Override recorded for <b>' + esc(id) + '</b>: ' + esc(to) + '. Reason: ' + esc(reason) + '.' : 'Override removed from <b>' + esc(id) + '</b>.') + '</p>';
+  msg += diff.length ? '<ul class="diff">' + diff.map(function (d) { return '<li>' + appLink(d.id) + ' ' + (d.from === d.to ? esc(d.note || '') : pill(d.from, true) + ' to ' + pill(d.to, true)) + '</li>'; }).join('') + '</ul>' : '<p class="muted">No decision changed.</p>';
+  S.askLog.push({ who: 'desk', html: msg });
+  D.rerender();
+  return msg;
+}
+
+function overrideHtml(a, r) {
+  var ov = r.override, opts = OUTS.filter(function (o) { return o !== r.outcome || (ov && ov.applied); });
+  var now = ov ? '<p class="ovr-now ' + (ov.applied ? 'on' : 'refused') + '">' + (ov.applied ? 'Override in place: ' + esc(ov.to) + '. Reason: ' + esc(ov.reason) + '.' : 'Override to ' + esc(ov.to) + ' refused: ' + esc(ov.refused) + '.') +
+    ' <button class="link" data-act="ovr-clear" data-id="' + esc(a.id) + '">Remove override</button></p>' : '';
+  return '<h4>Override this decision</h4>' + now +
+    '<div class="ovr"><select data-ovr-to="' + esc(a.id) + '" aria-label="New outcome">' + opts.map(function (o) { return '<option>' + o + '</option>'; }).join('') + '</select>' +
+    '<input type="text" data-ovr-why="' + esc(a.id) + '" placeholder="Reason (required)" aria-label="Reason for the override">' +
+    '<button class="btn sm" data-act="ovr-set" data-id="' + esc(a.id) + '">Apply override</button></div>' +
+    '<p class="muted sm ovr-err" data-ovr-err="' + esc(a.id) + '">An approval by override still respects one store per pin code and the territory\'s open slots.</p>';
+}
+
+/* ---------- row detail additions ---------- */
+window.DeskExt.afterDetail.push(function (a, r) {
+  var out = '';
+  if (r.outcome === 'Approve') {
+    var p = P.plan(a, r, S.cfg, S.loadedAt || new Date(), S.stages[a.id] || 0, new Date());
+    out += '<h4>Plan back from the target</h4><p>Sign by <b>' + fmt(p.latestSign) + '</b> to open on <b>' + fmt(p.open) + '</b>. ' + esc(p.basis) + '</p>' +
+      (p.atRisk ? '<p class="risk">At risk: ' + esc(p.risks.join('; ')) + '.</p>' : '') +
+      '<p class="muted sm">Stage: ' + esc(P.STAGES[p.stage]) + '. Next: ' + esc(p.next ? p.next.title + ' (' + p.next.owner + ', due ' + fmt(p.next.due) + ')' : 'none') + '. <button class="link" data-act="tab" data-v="onboard">Open the stage board</button></p>';
+  }
+  var t = TR.triggers(S)[a.id];
+  if (t && t.events.length) out += '<h4>Decide again when</h4><ul class="trig">' + t.events.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>' + (t.then ? '<p class="muted sm">Then: ' + esc(t.then) + '.</p>' : '');
+  return out + overrideHtml(a, r);
+});
+
+/* ---------- Onboarding tab: stage board and backward plans ---------- */
+function onboardHtml() {
+  var today = new Date(), ps = P.plans(S, today);
+  if (!ps.length) return '<p class="muted pad">No approved partners yet.</p>';
+  var risk = ps.filter(function (p) { return p.atRisk; }).length;
+  var soon = {}; P.OWNERS.forEach(function (o) { soon[o] = []; });
+  var horizon = today.getTime() + 14 * 86400000;
+  ps.forEach(function (p) { p.steps.forEach(function (s) { if (!s.done && s.due.getTime() <= horizon) soon[s.owner].push({ id: p.id, s: s }); }); });
+  var cols = P.STAGES.map(function (st, i) {
+    var cards = ps.filter(function (p) { return p.stage === i; }).map(function (p) {
+      var a = D.getApp(p.id);
+      return '<div class="card-s' + (p.atRisk ? ' risk' : '') + '"><div class="cs-h">' + appLink(p.id) + ' <span>' + esc(a.name) + '</span></div>' +
+        '<small>' + esc(a.city) + ', ' + esc(a.pin) + ' · opens ' + fmt(p.open) + '</small>' +
+        (p.next ? '<p>' + esc(p.next.title) + '<br><span class="muted">' + esc(p.next.owner) + ', due ' + fmt(p.next.due) + (p.next.overdue ? ' (overdue)' : '') + '</span></p>' : '<p>Open</p>') +
+        (p.atRisk ? '<p class="risk">' + esc(p.risks.join('; ')) + '</p>' : '') +
+        '<div class="cs-b"><button class="btn sm" data-act="stage" data-id="' + esc(p.id) + '" data-v="-1"' + (i ? '' : ' disabled') + ' aria-label="Move back">‹</button>' +
+        '<button class="btn sm" data-act="stage" data-id="' + esc(p.id) + '" data-v="1"' + (i < P.STAGES.length - 1 ? '' : ' disabled') + '>Mark ' + esc((P.STAGES[i + 1] || 'done').toLowerCase()) + ' ›</button></div></div>';
+    }).join('');
+    return '<section class="col"><h4>' + esc(st) + ' <span class="muted">' + ps.filter(function (p) { return p.stage === i; }).length + '</span></h4>' + cards + '</section>';
+  }).join('');
+  var owners = P.OWNERS.map(function (o) {
+    return '<div><b>' + esc(o) + '</b> <span class="muted">' + soon[o].length + '</span><ul>' + (soon[o].map(function (x) { return '<li>' + appLink(x.id) + ' ' + esc(x.s.title) + ' <span class="muted">by ' + fmt(x.s.due) + '</span></li>'; }).join('') || '<li class="muted">Nothing due</li>') + '</ul></div>';
+  }).join('');
+  var plans = ps.map(function (p) {
+    var a = D.getApp(p.id);
+    return '<details class="pl"><summary>' + esc(p.id) + ' ' + esc(a.name) + ': sign by ' + fmt(p.latestSign) + ', open ' + fmt(p.open) + (p.atRisk ? ' <span class="risk">at risk</span>' : '') + '</summary>' +
+      '<p class="muted sm">' + esc(p.basis) + (p.conditions.length ? ' Conditions: ' + esc(p.conditions.join('; ')) + '.' : '') + '</p>' +
+      '<table class="cmp"><thead><tr><th>Step</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead><tbody>' +
+      p.steps.map(function (s) { return '<tr><td>' + esc(s.title) + '</td><td>' + esc(s.owner) + '</td><td>' + fmt(s.due) + '</td><td>' + (s.done ? 'Done' : s.overdue ? '<span class="risk">Overdue</span>' : 'To do') + '</td></tr>'; }).join('') +
+      '</tbody></table></details>';
+  }).join('');
+  return '<div class="onb"><p class="lede sm">' + ps.length + ' approved partner' + (ps.length === 1 ? '' : 's') + ', ' + risk + ' at risk. Each plan runs back from the target launch to the latest date the agreement can be signed; every step has an owner and a due date.</p>' +
+    '<div class="sboard">' + cols + '</div><h4 class="mt">Due in the next 14 days, by owner</h4><div class="owners">' + owners + '</div>' +
+    '<h4 class="mt">Plans</h4>' + plans + '</div>';
+}
+
+/* ---------- Decision log tab ---------- */
+function logHtml() {
+  var tr = TR.triggers(S), ids = Object.keys(tr);
+  var waiting = ids.length ? '<ul class="wait">' + ids.map(function (id) {
+    var t = tr[id]; return '<li>' + appLink(id) + ' ' + pill(t.outcome, true) + ' <span>' + esc(t.events.join('; or ') || 'No trigger: needs a person') + '</span>' + (t.then ? ' <span class="muted">Then: ' + esc(t.then) + '.</span>' : '') + '</li>';
+  }).join('') + '</ul>' : '<p class="muted">Nothing is waiting.</p>';
+  var rows = S.log.slice().reverse().map(function (e) {
+    return '<tr><td class="muted">' + fmtT(e.at) + '</td><td><span class="kind k-' + esc(e.kind.split(' ')[0].toLowerCase()) + '">' + esc(e.kind) + '</span></td><td>' + (e.id ? appLink(e.id) : '') + '</td><td>' +
+      (e.to ? (e.from ? pill(e.from, true) + ' to ' : '') + pill(e.to, true) + ' ' : '') + esc(e.text || '') + '</td></tr>';
+  }).join('');
+  return '<div class="logv"><h4>Decide again when</h4><p class="muted sm">For every held or waitlisted application, the event that would change the decision. Tell the desk when it happens and everything is decided again.</p>' + waiting +
+    '<h4 class="mt">Decision log <span class="muted">' + S.log.length + ' entries, included in the export</span></h4><div class="tscroll"><table class="cmp lg"><tbody>' + rows + '</tbody></table></div></div>';
+}
+
+window.DeskExt.tabs.push({ id: 'onboard', label: 'Onboarding', render: onboardHtml });
+window.DeskExt.tabs.push({ id: 'log', label: 'Decision log', render: logHtml });
+
+/* ---------- export ---------- */
+window.DeskExt.exportSheets.push(function () {
+  return { name: 'Decision log', rows: [['Time', 'Type', 'Application', 'From', 'To', 'Detail']].concat(S.log.map(function (e) { return [e.at.toISOString(), e.kind, e.id || '', e.from || '', e.to || '', e.text || '']; })) };
+});
+window.DeskExt.exportSheets.push(function () {
+  var rows = [['Application', 'Applicant', 'Stage', 'Planned opening', 'Latest signing', 'At risk', 'Step', 'Owner', 'Due', 'Status']];
+  P.plans(S, new Date()).forEach(function (p) {
+    var a = D.getApp(p.id);
+    p.steps.forEach(function (s) { rows.push([p.id, a.name, P.STAGES[p.stage], fmt(p.open), fmt(p.latestSign), p.atRisk ? p.risks.join('; ') : '', s.title, s.owner, fmt(s.due), s.done ? 'Done' : s.overdue ? 'Overdue' : 'To do']); });
+  });
+  return { name: 'Onboarding plan', rows: rows };
+});
+window.DeskExt.exportSheets.push(function () {
+  var tr = TR.triggers(S);
+  return { name: 'Decide again when', rows: [['Application', 'Outcome', 'Decide again when (any of)', 'Then']].concat(Object.keys(tr).map(function (id) { var t = tr[id]; return [id, t.outcome, t.events.join('; or '), t.then]; })) };
+});
+
+/* ---------- Ask the desk: overrides in plain language ---------- */
+function idIn(text) {
+  var m = text.match(/\bapp[-\s_]?0*(\d{1,4})\b/i); if (!m) return null;
+  var n = parseInt(m[1], 10), a = S.apps.filter(function (x) { return parseInt(x.id.replace(/#.*$/, '').replace(/\D/g, ''), 10) === n; })[0];
+  return a ? a.id : 'APP-' + E.pad(n, 3);
+}
+window.DeskExt.answerers.push(function (text) {
+  var low = text.toLowerCase(), id = idIn(text);
+  if (!id || /^\s*(why|how|what|who|which|is|are|can|does|do)\b/.test(low)) return null;
+  if (/\b(remove|cancel|clear|drop|undo|lift)\b[^.]*\boverride\b/.test(low)) return fromChat(id, null, '');
+  var vm = low.match(/\b(approve|reject|waitlist|hold)\b/);
+  if (!vm || !(/\b(override|anyway|regardless|manually|force)\b/.test(low) || /^\s*(please\s+)?(approve|reject|waitlist|put|move|place|keep|hold)\b/.test(low))) return null;
+  var to = { approve: 'Approve', reject: 'Reject', waitlist: 'Waitlist', hold: 'Hold' }[vm[1]];
+  var rm = text.match(/\b(?:because|since|as|reason:?|due to)\s+(.{3,})$/i);
+  if (!rm) return '<p>To override ' + esc(id) + ' I need a reason, so it goes in the log. For example: "' + esc(to === 'Approve' ? 'Approve' : to) + ' ' + esc(id) + ' anyway because the partner already runs two of our kiosks".</p>';
+  return fromChat(id, to, rm[1].replace(/[.\s]+$/, ''));
+});
+function fromChat(id, to, why) { var html = setOverride(id, to, why); S.askLog.pop(); return html; }   // ask() adds the answer itself
+
+/* ---------- events ---------- */
+document.addEventListener('click', function (e) {
+  var el = e.target.closest && e.target.closest('[data-act="ovr-set"],[data-act="ovr-clear"],[data-act="stage"]'); if (!el) return;
+  var act = el.getAttribute('data-act'), id = el.getAttribute('data-id');
+  if (act === 'ovr-clear') setOverride(id, null, '');
+  else if (act === 'ovr-set') {
+    var to = document.querySelector('[data-ovr-to="' + id + '"]').value, why = document.querySelector('[data-ovr-why="' + id + '"]').value.trim();
+    if (!why) { var er = document.querySelector('[data-ovr-err="' + id + '"]'); er.textContent = 'Give a reason first: it goes in the decision log.'; er.classList.add('bad'); return; }
+    setOverride(id, to, why);
+  } else if (act === 'stage') {
+    var cur = S.stages[id] || 0, nx = Math.max(0, Math.min(P.STAGES.length - 1, cur + parseInt(el.getAttribute('data-v'), 10)));
+    S.stages[id] = nx; log({ kind: 'Stage', id: id, text: 'Moved to ' + P.STAGES[nx] });
+    D.rerender();
+  }
+});
+
+var css = document.createElement('style');
+css.textContent = [
+  '.ovr { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }',
+  '.ovr select, .ovr input { border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; background: var(--surface); font-size: 13.5px; }',
+  '.ovr input { flex: 1; min-width: 160px; }',
+  '.ovr-err { margin-top: 6px; } .ovr-err.bad { color: var(--no); }',
+  '.ovr-now { font-size: 13.5px; border-radius: 6px; padding: 6px 10px; border-left: 3px solid var(--accent); background: var(--surface2); }',
+  '.ovr-now.refused { border-left-color: var(--no); }',
+  '.risk { color: var(--no); font-weight: 600; }',
+  'p.risk { font-size: 13.5px; }',
+  '.trig { margin: 4px 0; padding-left: 18px; font-size: 14px; }',
+  '.sboard { display: grid; grid-template-columns: repeat(7, 196px); gap: 8px; overflow-x: auto; padding-bottom: 6px; }',
+  '.sboard .col { background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 8px; min-height: 120px; }',
+  '.sboard .col h4 { font-family: var(--display); font-size: 13.5px; margin: 0 0 8px; }',
+  '.card-s { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 9px; margin-bottom: 6px; font-size: 13px; }',
+  '.card-s.risk { border-color: var(--no); font-weight: 400; color: var(--ink); }',
+  '.card-s p { margin: 4px 0; font-size: 12.5px; line-height: 1.35; } .card-s small { color: var(--muted); font-size: 12px; }',
+  '.cs-h { font-weight: 600; } .cs-h span { font-weight: 500; }',
+  '.cs-b { display: flex; gap: 4px; margin-top: 6px; } .cs-b .btn { padding: 2px 8px; font-size: 12px; }',
+  '.owners { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }',
+  '.owners > div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; }',
+  '.owners ul { list-style: none; padding: 0; margin: 6px 0 0; } .owners li { margin-bottom: 4px; font-size: 13px; }',
+  '.onb h4.mt, .logv h4.mt { margin: 20px 0 8px; } .onb h4, .logv h4 { font-family: var(--display); font-size: 15px; }',
+  '.pl { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }',
+  '.pl summary { cursor: pointer; font-weight: 600; font-size: 14px; } .pl .cmp { margin-top: 6px; }',
+  '.pl .cmp th, .pl .cmp td { text-align: left; }',
+  '.wait { list-style: none; padding: 0; margin: 6px 0; } .wait li { padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }',
+  '.tscroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; }',
+  '.cmp.lg td { text-align: left; vertical-align: top; } .cmp.lg td:nth-child(-n+3) { white-space: nowrap; }',
+  '.kind { font-size: 12px; font-weight: 600; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; white-space: nowrap; }',
+  '.kind.k-override { color: var(--accent); border-color: var(--accent); } .kind.k-what-if { color: var(--wait); border-color: var(--wait); }',
+  '@media (max-width: 1060px) { .owners { grid-template-columns: repeat(2, minmax(0, 1fr)); } }',
+  '@media (max-width: 720px) { .owners { grid-template-columns: minmax(0, 1fr); } .sboard { grid-template-columns: repeat(7, 78vw); } }'
+].join('\n');
+document.head.appendChild(css);
 })();
 
 </script>

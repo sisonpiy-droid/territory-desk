@@ -399,7 +399,7 @@ function evaluateApp(a, ctx) {
 /* Allocation: one store per pin, slots per territory                  */
 /* ------------------------------------------------------------------ */
 function cmp(A, B) {
-  return (B.ev.score - A.ev.score) || ((B.a.exp || 0) - (A.a.exp || 0)) || ((B.a.invest || 0) - (A.a.invest || 0)) || (A.a.id < B.a.id ? -1 : 1);
+  return ((B.forced ? 1 : 0) - (A.forced ? 1 : 0)) || (B.ev.score - A.ev.score) || ((B.a.exp || 0) - (A.a.exp || 0)) || ((B.a.invest || 0) - (A.a.invest || 0)) || (A.a.id < B.a.id ? -1 : 1);
 }
 
 function core(apps, territories, stores, cfg) {
@@ -408,7 +408,26 @@ function core(apps, territories, stores, cfg) {
   var evals = {}, res = {};
   live.forEach(function (a) { evals[a.id] = evaluateApp(a, ctx); });
 
-  var ready = live.filter(function (a) { return evals[a.id].level === 'ready'; }).map(function (a) { return { a: a, ev: evals[a.id] }; });
+  // Human overrides (a.override = { to, reason, at }), oldest first. An approval override goes first in allocation,
+  // but is refused if it would put a store on a pin with a store, outside every territory, on a pin another
+  // override already holds, or into a territory whose slots are all held by overrides.
+  var ovr = {}, heldPins = {}, heldSlots = {};
+  live.filter(function (a) { return a.override; }).sort(function (a, b) { return (a.override.at || 0) - (b.override.at || 0); }).forEach(function (a) {
+    var o = a.override, ev = evals[a.id], why = '';
+    if (o.to === 'Approve') {
+      if (ev.level === 'reject' && ev.issues.some(function (i) { return i.code === 'NO_TERRITORY'; })) why = 'the brand has no territory in ' + a.city;
+      else if (!/^\d{6}$/.test(a.pin || '') || !ev.ter) why = 'pin ' + (a.pin || '(blank)') + ' is not in any expansion territory, so there is no slot to give';
+      else if (ctx.storeByPin[a.pin]) why = ctx.storeByPin[a.pin].id + ' already operates in pin ' + a.pin + ', and the brand never opens two stores in one pin code';
+      else if (heldPins[a.pin]) why = heldPins[a.pin] + ' already holds pin ' + a.pin + ' by override, and the brand never opens two stores in one pin code';
+      else if ((heldSlots[ev.ter.id] || 0) >= ev.ter.slots) why = 'every open slot in ' + ev.ter.id + ' (' + ev.ter.slots + ') is already held by an override';
+      if (!why) { heldPins[a.pin] = a.id; heldSlots[ev.ter.id] = (heldSlots[ev.ter.id] || 0) + 1; }
+    }
+    ovr[a.id] = { to: o.to, reason: o.reason || '', at: o.at || 0, applied: !why, refused: why };
+  });
+  var forcedTo = function (id) { return ovr[id] && ovr[id].applied ? ovr[id].to : null; };
+
+  var ready = live.filter(function (a) { var f = forcedTo(a.id); return f ? f === 'Approve' : evals[a.id].level === 'ready'; })
+    .map(function (a) { return { a: a, ev: evals[a.id], forced: forcedTo(a.id) === 'Approve' }; });
   var byPin = {};
   ready.forEach(function (x) { (byPin[x.a.pin] = byPin[x.a.pin] || []).push(x); });
   var pinWinners = [];
@@ -444,10 +463,17 @@ function core(apps, territories, stores, cfg) {
   live.forEach(function (a) {
     var ev = evals[a.id], oc = outcome[a.id];
     var r = { id: a.id, score: ev.score, parts: ev.parts, issues: ev.issues, tier: ev.tier, ter: ev.ter, conditions: ev.conditions, feasible: ev.feasible };
-    if (ev.level === 'reject') r.outcome = 'Reject';
+    var f = forcedTo(a.id);
+    if (ovr[a.id]) r.override = ovr[a.id];
+    if (f && f !== 'Approve') { r.outcome = f; if (f === 'Waitlist') r.waitReason = 'override'; }
+    else if (f === 'Approve') {
+      r.outcome = oc.o;
+      ev.issues.filter(function (i) { return i.level === 'hold' || i.level === 'reject'; }).forEach(function (i) { r.conditions = r.conditions.concat('Resolve before signing (approved by override): ' + i.title.toLowerCase()); });
+    }
+    else if (ev.level === 'reject') r.outcome = 'Reject';
     else if (ev.level === 'hold') r.outcome = 'Hold';
     else r.outcome = oc.o;
-    if (r.outcome === 'Approve' || r.outcome === 'Waitlist') {
+    if ((r.outcome === 'Approve' || r.outcome === 'Waitlist') && outcome[a.id]) {
       var x = ready.filter(function (y) { return y.a.id === a.id; })[0];
       r.rankPin = x.rankPin; r.pinN = x.pinN; r.rankTer = x.rankTer || null; r.terN = x.terN || null;
       r.pinRivals = x.pinGroup.filter(function (y) { return y.a.id !== a.id; }).map(function (y) { return y.a.id; });
@@ -541,21 +567,30 @@ function strengths(r) {
 
 function explain(r, a, state) {
   var cfg = state.cfg, out = { headline: '', lines: [], next: [] };
-  var t = r.ter;
+  var t = r.ter, ov = r.override;
+  var OVL = { Approve: 'approval', Waitlist: 'waitlist', Hold: 'hold', Reject: 'rejection' };
+  if (ov && ov.applied && ov.to !== 'Approve') {
+    out.headline = { Waitlist: 'Waitlisted', Hold: 'On hold', Reject: 'Not taken forward' }[ov.to] + ' by override';
+    out.lines.push('The expansion team overrode the standard decision. Reason given: ' + (ov.reason || 'none') + '.');
+    r.issues.filter(function (i) { return i.level !== 'info'; }).forEach(function (i) { out.lines.push('Note: ' + i.detail); });
+    out.next.push('Remove the override to return to the standard decision.');
+    out.short = out.headline + ': ' + (ov.reason || 'no reason given');
+    return out;
+  }
   if (r.outcome === 'Approve') {
-    out.headline = 'Approved for pin ' + a.pin + (t ? ' in ' + t.id + ' (' + a.city + ', ' + t.tier + ', ' + t.priority + ' priority)' : '');
+    out.headline = (ov && ov.applied ? 'Approved by override' : 'Approved') + ' for pin ' + a.pin + (t ? ' in ' + t.id + ' (' + a.city + ', ' + t.tier + ', ' + t.priority + ' priority)' : '');
     var st = strengths(r).slice(0, 2).map(function (s) { return s.p.label.toLowerCase() + ' (' + s.p.note + ')'; });
     out.lines.push('Score ' + r.score + ' out of 100. Strongest points: ' + st.join('; ') + '.');
-    if (r.pinN > 1) out.lines.push('Won pin ' + a.pin + ' against ' + r.pinRivals.join(', ') + (r.margin !== undefined ? ' by ' + r.margin + ' points.' : '.'));
-    if (r.terN) out.lines.push('Took one of ' + t.slots + ' open slot' + (t.slots === 1 ? '' : 's') + ' in ' + t.id + (r.nextRival ? '; the next in line is ' + r.nextRival + ' (' + r.margin + ' points behind).' : '.'));
+    if (r.pinN > 1) out.lines.push('Won pin ' + a.pin + ' against ' + r.pinRivals.join(', ') + (r.margin < 0 ? ' by override.' : r.margin !== undefined ? ' by ' + r.margin + ' points.' : '.'));
+    if (r.terN) out.lines.push('Took one of ' + t.slots + ' open slot' + (t.slots === 1 ? '' : 's') + ' in ' + t.id + (r.nextRival ? '; the next in line is ' + r.nextRival + (r.margin < 0 ? '.' : ' (' + r.margin + ' points behind).') : '.'));
     if (r.conditions.length) out.lines.push('Conditions to clear: ' + r.conditions.join('; ') + '.');
   } else if (r.outcome === 'Waitlist') {
     out.headline = 'Eligible, but waitlisted';
     if (r.waitReason === 'pin_lost') {
-      out.lines.push('Scores ' + r.score + ', but pin ' + a.pin + ' goes to ' + r.winner + ' (' + r.margin + ' points ahead). The brand opens one store per pin code.');
+      out.lines.push('Scores ' + r.score + ', but pin ' + a.pin + ' goes to ' + r.winner + (r.margin < 0 ? ' (approved by override)' : ' (' + r.margin + ' points ahead)') + '. The brand opens one store per pin code.');
       out.next.push('Moves up if ' + r.winner + ' drops out or fails verification.');
     } else {
-      out.lines.push('Best applicant for pin ' + a.pin + ' (score ' + r.score + '), but ' + t.id + ' has only ' + t.slots + ' open slot' + (t.slots === 1 ? '' : 's') + ', taken by ' + (r.beatenBy || []).join(', ') + ' with higher scores' + (r.margin ? ' (' + r.margin + ' points ahead at the cut-off).' : '.'));
+      out.lines.push('Best applicant for pin ' + a.pin + ' (score ' + r.score + '), but ' + t.id + ' has only ' + t.slots + ' open slot' + (t.slots === 1 ? '' : 's') + ', taken by ' + (r.beatenBy || []).join(', ') + (r.margin < 0 ? ', at least one by override.' : ' with higher scores' + (r.margin ? ' (' + r.margin + ' points ahead at the cut-off).' : '.')));
       out.next.push('Promoted if a slot opens in ' + t.id + ' or one of those applicants drops out.');
     }
     if (r.alternatives && r.alternatives.length) out.next.push('Open alternative' + (r.alternatives.length > 1 ? 's' : '') + ' in ' + a.city + ': ' + r.alternatives.map(function (p) { return p.pin + ' (' + p.ter + ')'; }).join(', ') + ' (needs a space there).');
@@ -582,10 +617,12 @@ function explain(r, a, state) {
     out.next.push('Keep on file and re-contact if the situation changes (for example, more capital or a new territory opening).');
   }
   r.issues.filter(function (i) { return i.level === 'soft' || i.level === 'info'; }).forEach(function (i) { out.lines.push('Note: ' + i.detail); });
+  if (ov && ov.applied) out.lines.unshift('The expansion team approved this by override. Reason given: ' + (ov.reason || 'none') + '. It goes first for pin ' + a.pin + ' and a slot in ' + (t ? t.id : 'its territory') + '.');
+  if (ov && !ov.applied) out.lines.unshift('An override to ' + OVL[ov.to] + ' was refused: ' + ov.refused + '. The standard decision stands.');
   if (r.outcome === 'Approve') {
-    out.short = 'Takes pin ' + a.pin + (t ? ' in ' + t.id : '') + (r.pinN > 1 ? ', ahead of ' + r.pinRivals.join(', ') + ' by ' + r.margin : r.nextRival ? ', ' + r.margin + ' ahead of ' + r.nextRival : '') + (r.conditions.length ? '; ' + r.conditions.length + ' condition' + (r.conditions.length > 1 ? 's' : '') : '');
+    out.short = (ov && ov.applied ? 'By override: ' : '') + 'Takes pin ' + a.pin + (t ? ' in ' + t.id : '') + (r.pinN > 1 ? ', ahead of ' + r.pinRivals.join(', ') + (r.margin < 0 ? '' : ' by ' + r.margin) : r.nextRival && r.margin >= 0 ? ', ' + r.margin + ' ahead of ' + r.nextRival : '') + (r.conditions.length ? '; ' + r.conditions.length + ' condition' + (r.conditions.length > 1 ? 's' : '') : '');
   } else if (r.outcome === 'Waitlist') {
-    out.short = r.waitReason === 'pin_lost' ? 'Pin ' + a.pin + ' goes to ' + r.winner + ' (' + r.margin + ' points ahead)' : t.id + ' is full; ' + r.margin + ' points under the cut-off';
+    out.short = r.waitReason === 'pin_lost' ? 'Pin ' + a.pin + ' goes to ' + r.winner + (r.margin < 0 ? ' by override' : ' (' + r.margin + ' points ahead)') : t.id + ' is full' + (r.margin < 0 ? ' (override)' : '; ' + r.margin + ' points under the cut-off');
   } else out.short = out.headline;
   return out;
 }
@@ -679,11 +716,11 @@ function letter(r, a, lang, cfg) {
     var asks = r.issues.filter(function (i) { return i.level === 'hold' && ASK[i.code]; }).map(function (i) {
       return fill(ASK[i.code][L], { min: cfg.minSpace, need: i.need || '' });
     });
-    m.ask = asks.join(L === 'en' ? '; ' : '; ');
+    m.ask = asks.join('; ') || { en: 'a short call with our team to complete a few checks', hi: 'हमारी टीम के साथ एक छोटी कॉल, ताकि कुछ जाँच पूरी हो सकें', kn: 'ಕೆಲವು ಪರಿಶೀಲನೆಗಳನ್ನು ಪೂರ್ಣಗೊಳಿಸಲು ನಮ್ಮ ತಂಡದೊಂದಿಗೆ ಒಂದು ಸಣ್ಣ ಕರೆ' }[L];
   }
   if (r.outcome === 'Reject') {
     var rj = r.issues.filter(function (i) { return i.level === 'reject'; })[0];
-    m.why = rj && REJECT_WHY[rj.code] ? REJECT_WHY[rj.code][L] : '';
+    m.why = rj && REJECT_WHY[rj.code] ? REJECT_WHY[rj.code][L] : { en: 'it does not fit our current expansion plan', hi: 'यह हमारी मौजूदा विस्तार योजना में फ़िट नहीं बैठता', kn: 'ಇದು ನಮ್ಮ ಪ್ರಸ್ತುತ ವಿಸ್ತರಣಾ ಯೋಜನೆಗೆ ಹೊಂದುತ್ತಿಲ್ಲ' }[L];
   }
   var tpl = T[r.outcome];
   if (!tpl) return '';

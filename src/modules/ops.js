@@ -186,7 +186,7 @@ function track(S, ev, now) {
 }
 function median(xs) { if (!xs.length) return null; var s = xs.slice().sort(function (a, b) { return a - b; }), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
 function adoption(S, ev) {
-  var L = live(S), decided = L.length, overrides = (S.overrides || []).length;
+  var L = live(S), decided = L.length, overrides = L.filter(function (a) { var o = S.run.res[a.id].override; return o && o.applied; }).length;
   var slots = 0, filled = 0; S.ters.forEach(function (t) { slots += t.slots; filled += Math.min(t.slots, S.run.approvedByTer[t.id] || 0); });
   var inPref = ev.copies.filter(function (c) { return c.lang === c.pref; }).length;
   var withPref = L.filter(function (a) { return a.lang; }).length;

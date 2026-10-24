@@ -9,7 +9,7 @@ var OUT_CLASS = { Approve: 'ok', Waitlist: 'wait', Hold: 'hold', Reject: 'no', W
 
 // Extension points so new features can live in their own files (src/modules/*.js load before this file, src/ext/*.js after it)
 window.DeskExt = window.DeskExt || {};
-['afterSummary', 'tabs', 'afterRender', 'answerers'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
+['afterSummary', 'tabs', 'afterRender', 'answerers', 'afterDetail', 'afterRecompute', 'exportSheets'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
 function extHtml() {
   return window.DeskExt.afterSummary.map(function (fn) { try { return fn(S) || ''; } catch (e) { return '<p class="muted pad">A section failed to load: ' + esc(e.message) + '</p>'; } }).join('');
 }
@@ -76,6 +76,8 @@ function recompute(first) {
   }
   S.changed = {};
   diff.forEach(function (d) { S.changed[d.id] = d.from; });
+  // S.cause says what triggered this ({ kind, text }); set by whoever changed the data
+  window.DeskExt.afterRecompute.forEach(function (fn) { try { fn(diff, !!first || !before, S.cause || null); } catch (e) { console.error(e); } });
   return diff;
 }
 function snapshot() {
@@ -216,7 +218,8 @@ function detailHtml(a, r, x) {
   var rec = [['Investment', a.invest === null ? 'not given' : 'Rs ' + a.invest + ' lakh'], ['Experience', a.exp === null ? 'not given' : a.exp + ' yrs'], ['Business', a.biz || 'not given'],
     ['Space', a.space + (a.size !== null ? ', ' + a.size + ' sq ft' : '') + ', ' + a.floor.toLowerCase()], ['Target launch', a.launch === null ? 'not given' : a.launch + ' months'], ['Training language', a.lang || 'not given'], ['Notes', a.notes || 'none']]
     .map(function (z) { return '<dt>' + z[0] + '</dt><dd>' + esc(z[1]) + '</dd>'; }).join('');
-  return '<div class="detail"><div class="dcol"><h4>Why</h4>' + why + next + plan + '</div>' +
+  var ext = window.DeskExt.afterDetail.map(function (fn) { try { return fn(a, r, S) || ''; } catch (e) { return ''; } }).join('');
+  return '<div class="detail"><div class="dcol"><h4>Why</h4>' + why + next + plan + ext + '</div>' +
     '<div class="dcol"><h4>' + (r.outcome === 'Hold' || r.outcome === 'Reject' ? 'Indicative score (not ranked)' : 'Score out of 100') + '</h4>' + bars +
     '<h4>Data flags</h4><ul class="flags">' + flags + '</ul>' +
     '<h4>Message to the applicant</h4><div class="seg-g">' + langs + '</div><p class="letter" lang="' + (lang === 'Hindi' ? 'hi' : lang === 'Kannada' ? 'kn' : 'en') + '">' + esc(msg) + '</p>' +
@@ -558,7 +561,8 @@ function doUndo(fromChat) {
   var u = S.undo.pop();
   if (!u) return fromChat ? '<p>Nothing to undo.</p>' : '';
   S.apps = u.apps; S.ters = u.ters; S.cfg = u.cfg;
-  var diff = recompute(); render();
+  var c0 = S.cause; S.cause = { kind: 'Undo', text: 'Last change undone' };
+  var diff = recompute(); S.cause = c0; render();
   return fromChat ? '<p class="ap">Last change undone.</p>' + diffHtml(diff) : '';
 }
 
@@ -566,7 +570,9 @@ function ask(text) {
   text = String(text || '').trim(); if (!text) return;
   S.askLog.push({ who: 'me', text: text });
   var html;
+  S.cause = { kind: /what if/i.test(text) ? 'What-if' : 'New information', text: text };
   try { html = answer(text); } catch (e) { html = '<p>Something went wrong reading that: ' + esc(e.message) + '</p>'; }
+  S.cause = null;
   S.askLog.push({ who: 'desk', html: html });
   var asideEl = $('#ask'); if (asideEl) asideEl.innerHTML = askHtml();
   scrollAskToEnd();
@@ -624,6 +630,7 @@ function exportDecisions() {
     brows.push([t.id, t.city, t.tier, t.priority, t.slots, Math.min(t.slots, S.run.approvedByTer[t.id] || 0), p, st ? 'Locked: ' + st.id : ap ? 'Approved: ' + ap : 'Open']);
   }); });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(brows), 'Pin board');
+  window.DeskExt.exportSheets.forEach(function (fn) { try { var sh = fn(S); if (sh) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sh.rows), sh.name); } catch (e) { console.error(e); } });
   XLSX.writeFile(wb, 'franchise-decisions.xlsx');
 }
 
@@ -658,8 +665,8 @@ document.addEventListener('click', function (e) {
     case 'ask': { var i = $('#askin'); ask(i.value); break; }
     case 'sugg': ask(v); break;
     case 'undo': doUndo(false); break;
-    case 'reset-data': if (S.run && S.initial) { pushUndo(); S.apps = E.clone(S.initial.apps); S.ters = E.clone(S.initial.ters); recompute(); render(); } break;
-    case 'reset-cfg': pushUndo(); S.cfg = E.clone(E.DEFAULT_CFG); recompute(); render(); break;
+    case 'reset-data': if (S.run && S.initial) { pushUndo(); S.apps = E.clone(S.initial.apps); S.ters = E.clone(S.initial.ters); S.cause = { kind: 'Restore', text: 'Uploaded data restored' }; recompute(); S.cause = null; render(); } break;
+    case 'reset-cfg': pushUndo(); S.cfg = E.clone(E.DEFAULT_CFG); S.cause = { kind: 'Assumption', text: 'Default assumptions restored' }; recompute(); S.cause = null; render(); break;
     case 'drop-example-app': S.apps = S.apps.filter(function (a) { return !a.templateExample; }); S.notices = S.notices.filter(function (n) { return n.indexOf('drop-example-app') < 0; }); recompute(); render(); break;
     case 'drop-example-ter': S.ters = S.ters.filter(function (t) { return !t.templateExample; }); S.notices = S.notices.filter(function (n) { return n.indexOf('drop-example-ter') < 0; }); recompute(); render(); break;
   }
@@ -676,7 +683,8 @@ document.addEventListener('change', function (e) {
     var val = parseFloat(e.target.value); if (isNaN(val)) return;
     if (p === 'rejectRatio') val = val / 100;
     pushUndo(); setPath(S.cfg, p, val);
-    var diff = recompute(); render();
+    S.cause = { kind: 'Assumption', text: p + ' set to ' + e.target.value };
+    var diff = recompute(); S.cause = null; render();
     S.tab = 'assume'; render();
     S.askLog.push({ who: 'desk', html: '<p class="ap">Assumption changed (' + esc(p) + ' = ' + esc(e.target.value) + ').</p><p><b>What changed</b></p>' + diffHtml(diff) });
     var asideEl = $('#ask'); if (asideEl) asideEl.innerHTML = askHtml(); scrollAskToEnd();
