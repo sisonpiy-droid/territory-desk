@@ -137,7 +137,10 @@ function territoryHealth(S) {
     var eligible = inT.filter(function (a) { var o = res[a.id].outcome; return o === 'Approve' || o === 'Waitlist'; });
     var couldFill = inT.filter(function (a) { var r = res[a.id]; return r.outcome === 'Hold' && r.ifFixed && r.ifFixed.possible && r.ifFixed.outcome === 'Approve'; });
     var flags = [];
-    if (eligible.length > t.slots) flags.push({ k: 'over', text: 'Oversubscribed: ' + eligible.length + ' eligible for ' + t.slots + ' slot' + (t.slots === 1 ? '' : 's') });
+    // oversubscribed counts eligible applicants on different pins: two on one pin compete for the pin, not for a slot
+    var pinsWanted = {}; eligible.forEach(function (a) { pinsWanted[a.pin] = 1; });
+    var wanted = Object.keys(pinsWanted).length;
+    if (wanted > t.slots) flags.push({ k: 'over', text: 'Oversubscribed: ' + wanted + ' eligible applicants on different pins for ' + t.slots + ' slot' + (t.slots === 1 ? '' : 's') });
     if (open > 0) flags.push({ k: 'under', text: 'Undersubscribed: ' + open + ' open slot' + (open === 1 ? '' : 's') + ', no eligible applicant on a free pin' + (couldFill.length ? ' (' + couldFill.map(function (a) { return a.id; }).join(', ') + ' could, once fixed)' : '') });
     if (open > freePins.length) flags.push({ k: 'short', text: 'Only ' + freePins.length + ' free pin' + (freePins.length === 1 ? '' : 's') + ' left for ' + open + ' open slot' + (open === 1 ? '' : 's') });
     if (locked.length) flags.push({ k: 'locked', text: locked.length + ' of ' + t.pins.length + ' pins locked by existing stores (' + locked.join(', ') + ')' });

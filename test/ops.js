@@ -18,7 +18,7 @@ assert(wl.alt.some(x => x.id === 'APP-015' && x.msgs[0].alt === '560100'), 'APP-
 assert(/560100/.test(O.message(S, wl.alt[0].msgs[0], 'Kannada')), 'alternative-pin message in Kannada');
 
 const h = Object.fromEntries(O.territoryHealth(S).map(t => [t.id, t]));
-assert(h['TER-01'].flags.some(f => f.k === 'over') && h['TER-04'].flags.some(f => f.k === 'under') && h['TER-03'].locked === 2);
+assert(h['TER-02'].flags.some(f => f.k === 'over') && !h['TER-01'].flags.some(f => f.k === 'over') && h['TER-04'].flags.some(f => f.k === 'under') && h['TER-03'].locked === 2);
 
 const b = O.beforeAfter(S, O.DEFAULT_TIME);
 assert.strictEqual(b.follow, 9);

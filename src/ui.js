@@ -9,7 +9,7 @@ var OUT_CLASS = { Approve: 'ok', Waitlist: 'wait', Hold: 'hold', Reject: 'no', W
 
 // Extension points so new features can live in their own files (src/modules/*.js load before this file, src/ext/*.js after it)
 window.DeskExt = window.DeskExt || {};
-['afterSummary', 'tabs', 'afterRender', 'answerers', 'afterDetail', 'afterRecompute', 'exportSheets'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
+['afterSummary', 'tabs', 'afterRender', 'answerers', 'afterDetail', 'afterRecompute', 'exportSheets', 'rowBadges'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
 function extHtml() {
   return window.DeskExt.afterSummary.map(function (fn) { try { return fn(S) || ''; } catch (e) { return '<p class="muted pad">A section failed to load: ' + esc(e.message) + '</p>'; } }).join('');
 }
@@ -187,7 +187,7 @@ function rowHtml(a) {
     '<button class="row-h" data-act="toggle" data-v="' + esc(a.id) + '" aria-expanded="' + open + '">' +
       '<span class="rid">' + esc(a.id) + '</span>' +
       '<span class="rname">' + esc(a.name) + '<small>' + esc(a.city) + ', ' + esc(a.pin) + '</small></span>' +
-      '<span class="rout">' + pill(r.outcome) + was + '</span>' + score +
+      '<span class="rout">' + pill(r.outcome) + was + window.DeskExt.rowBadges.map(function (fn) { try { return fn(a, r, S) || ''; } catch (e) { return ''; } }).join('') + '</span>' + score +
       '<span class="rwhy">' + esc(x.short || x.headline) + '</span>' +
       '<span class="chev" aria-hidden="true"></span></button>' +
     (open ? detailHtml(a, r, x) : '') + '</article>';
