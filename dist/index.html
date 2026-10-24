@@ -1090,7 +1090,8 @@ var DEFAULTS = {
   ring1: 0.5, ring2: 0.25,                  // weight of neighbouring cells in crowd potential
   radius: { 'Tier 1': 2, 'Tier 2': 3, 'Tier 3': 5 },   // store catchment, km: placeholder, to verify with customer-origin data
   penalty: 1,                               // points lost per 1% of the catchment's crowd already within reach of a store
-  act: { market: 3, mall: 4, supermarket: 2, busStation: 3, busStop: 0.5, rail: 4, college: 2, hospital: 2, shops: 0.2 }   // activity points per place
+  act: { market: 3, mall: 4, supermarket: 2, busStation: 3, busStop: 0.5, rail: 4, college: 2, hospital: 2, shops: 0.2 },   // activity points per place
+  flagAt: 0.4, vetoAt: 0.6                  // cannibalisation tolerance: flag, and suggest a hold, at this share of overlap (placeholders)
 };
 var KIND_LABEL = { market: 'market', mall: 'mall', supermarket: 'supermarket', busStation: 'bus station', busStop: 'bus stop', rail: 'metro or railway station', college: 'college', hospital: 'hospital', shops: 'shop' };
 
@@ -1226,6 +1227,29 @@ function baseline(cfg) {
   return { n: tops.length, medianTop: tops.length ? tops[Math.floor((tops.length - 1) / 2)] : null };
 }
 
+// Crowd potential (0 to 100 within its city) at a pin's centre, or null when the pin is not mapped
+function pinCrowd(pin, cfg) {
+  var p = pinInfo(pin); if (!p) return null;
+  var c = city(p.city, cfg || DEFAULTS), i = cellAt(c, p.lat, p.lon);
+  return i < 0 ? null : c.potential[i];
+}
+
+/* ---------- cannibalisation: overlap at an applicant's pin ---------- */
+// The applicant is placed at the centre of their pin (no street address in the form). Competition: existing stores plus
+// partners approved in this session, minus the applicant. Also reports the least-overlapping hexagon in the same pin.
+function applicantOverlap(pin, others, cfg, skipId) {
+  cfg = cfg || DEFAULTS;
+  var p = pinInfo(pin); if (!p) return { ok: false };
+  var c = city(p.city, cfg), i = cellAt(c, p.lat, p.lon); if (i < 0) return { ok: false };
+  var R = cfg.radius[c.tier] || 3, ss = sites(others).filter(function (s) { return s.id !== skipId; });
+  var o = overlap(c, i, R, ss, skipId);
+  var near = ss.map(function (s) { return { id: s.id, kind: s.kind, km: km(c.ll[i], [s.lat, s.lon]) }; }).filter(function (s) { return s.km <= 2 * R; }).sort(function (a, b) { return a.km - b.km; });
+  var best = null;
+  (c.pins[pin] || []).forEach(function (j) { var oj = overlap(c, j, R, ss, skipId).share; if (!best || oj < best.share) best = { share: oj, i: j }; });
+  var level = o.share >= cfg.vetoAt ? 'veto' : o.share >= cfg.flagAt ? 'flag' : 'ok';
+  return { ok: true, share: o.share, level: level, radius: R, city: c.name, near: near, bestInPin: best ? best.share : null, live: c.live };
+}
+
 /* ---------- a plain search brief for the partner ---------- */
 function brief(rec, who) {
   if (!rec.ok) return rec.why;
@@ -1240,7 +1264,7 @@ function brief(rec, who) {
   return lines.join('\n');
 }
 
-var api = { DEFAULTS: DEFAULTS, clone: clone, km: km, city: city, pinInfo: pinInfo, sites: sites, overlap: overlap, recommend: recommend, backtest: backtest, baseline: baseline, brief: brief, addArea: addArea, data: G };
+var api = { DEFAULTS: DEFAULTS, clone: clone, km: km, city: city, pinInfo: pinInfo, sites: sites, overlap: overlap, recommend: recommend, backtest: backtest, baseline: baseline, brief: brief, addArea: addArea, applicantOverlap: applicantOverlap, pinCrowd: pinCrowd, cfg: clone(DEFAULTS), data: G };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.DeskGeo = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1526,6 +1550,58 @@ function plans(S, now) {
 var api = { STAGES: STAGES, OWNERS: OWNERS, plan: plan, plans: plans };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.DeskPlan = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* modules\planner.js */
+// Pipeline planner: from the uploaded file only, how many more applicants each territory needs to fill its open slots.
+// Placement rate = placed / received. Every setting below is an editable assumption.
+(function (root) {
+'use strict';
+var DEFAULTS = {
+  ownRateFrom: 8,       // a territory uses its own placement rate once it has at least this many applications; otherwise the overall rate
+  holdClear: 0,         // share of fixable holds expected to clear and take a slot (0 = count none; no data in the file to set it)
+  weeks: 8              // weeks to recruit in, for a weekly target
+};
+var PR = { High: 0, Medium: 1, Low: 2 };
+
+// Wilson 90% interval for a proportion: honest about small samples
+function interval(k, n) {
+  if (!n) return [0, 1];
+  var z = 1.645, p = k / n, d = 1 + z * z / n, c = (p + z * z / (2 * n)) / d, h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
+  return [Math.max(0, c - h), Math.min(1, c + h)];
+}
+function need(open, rate) { return open <= 0 ? 0 : rate > 0 ? Math.ceil(open / rate) : null; }
+
+function plan(S, cfg, crowdAt) {
+  cfg = cfg || DEFAULTS;
+  var res = S.run.res, received = S.apps.length;
+  var placed = S.apps.filter(function (a) { return !a.withdrawn && res[a.id] && res[a.id].outcome === 'Approve'; }).length;
+  var rate = received ? placed / received : 0, ci = interval(placed, received);
+  var rows = S.ters.map(function (t) {
+    var inT = S.apps.filter(function (a) { return t.pins.indexOf(a.pin) >= 0; });
+    var rT = inT.filter(function (a) { return !a.withdrawn && res[a.id] && res[a.id].outcome === 'Approve'; }).length;
+    var filled = Math.min(t.slots, S.run.approvedByTer[t.id] || 0), open = t.slots - filled;
+    var fixable = inT.filter(function (a) { var r = res[a.id]; return r && r.outcome === 'Hold' && r.ifFixed && r.ifFixed.possible && r.ifFixed.outcome === 'Approve'; });
+    var fromHolds = Math.min(open, Math.floor(fixable.length * cfg.holdClear));
+    var own = inT.length >= cfg.ownRateFrom, r = own ? rT / inT.length : rate, ciT = own ? interval(rT, inT.length) : ci;
+    var gap = open - fromHolds, n = need(gap, r);
+    var pins = t.pins.filter(function (p) { return !S.run.ctx.storeByPin[p] && !S.run.approvedPins[p]; })
+      .map(function (p) { return { pin: p, crowd: crowdAt ? crowdAt(p) : null }; })
+      .sort(function (x, y) { return (y.crowd == null ? -1 : y.crowd) - (x.crowd == null ? -1 : x.crowd) || (x.pin < y.pin ? -1 : 1); });
+    return { id: t.id, city: t.city, priority: t.priority, slots: t.slots, filled: filled, open: open, received: inT.length, placed: rT,
+             rate: r, ownRate: own, range: gap > 0 ? [need(gap, ciT[1]), need(gap, ciT[0])] : [0, 0], fixable: fixable.map(function (a) { return a.id; }), fromHolds: fromHolds,
+             gap: gap, needed: n, perWeek: n == null ? null : Math.ceil(n / Math.max(1, cfg.weeks)), pins: pins };
+  }).sort(function (x, y) { return (y.gap > 0) - (x.gap > 0) || PR[x.priority] - PR[y.priority] || (y.needed || 0) - (x.needed || 0) || (x.id < y.id ? -1 : 1); });
+  var tot = { open: 0, needed: 0, unknown: false };
+  rows.forEach(function (x) { tot.open += x.open; if (x.needed == null && x.gap > 0) tot.unknown = true; else tot.needed += x.needed || 0; });
+  return { received: received, placed: placed, rate: rate, ci: ci, rows: rows, total: tot, cfg: cfg };
+}
+
+var api = { DEFAULTS: DEFAULTS, plan: plan, interval: interval };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.DeskPlanner = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -2622,6 +2698,56 @@ window.__desk = { S: S, E: E, ask: ask, load: load, rerender: render, recompute:
 
 </script>
 <script>
+/* ext\cannibal.js */
+// Cannibalisation limit (flag and suggestion only; decisions are not changed).
+// For each applicant: the share of the crowd within the catchment of their pin that existing stores and partners approved
+// this session already reach. Uses the Site finder's data and settings (src/modules/geo.js, Geo.cfg).
+(function () {
+'use strict';
+var D = window.__desk, S = D.S, esc = D.esc, Geo = window.DeskGeo;
+if (!Geo || !Geo.data) return;
+var cache = { key: null, m: {} };
+
+function approved() { return S.apps.filter(function (a) { return !a.withdrawn && S.run.res[a.id] && S.run.res[a.id].outcome === 'Approve'; }).map(function (a) { return { id: a.id, pin: a.pin }; }); }
+function get(a) {
+  var key = JSON.stringify(Geo.cfg) + '|' + approved().map(function (x) { return x.id + x.pin; }).join(',');
+  if (cache.key !== key || cache.run !== S.run) { cache = { key: key, run: S.run, m: {} }; }
+  if (!(a.id in cache.m)) cache.m[a.id] = Geo.applicantOverlap(a.pin, approved(), Geo.cfg, a.id);
+  return cache.m[a.id];
+}
+function pct(x) { return Math.round(100 * x) + '%'; }
+
+window.DeskExt.rowBadges.push(function (a, r) {
+  if (r.outcome !== 'Approve' && r.outcome !== 'Waitlist') return '';   // only where a store would actually open
+  var o = get(a); if (!o.ok || o.level === 'ok') return '';
+  return '<span class="ovl ' + o.level + '" title="' + esc(pct(o.share) + ' of the crowd within ' + o.radius + ' km is already within reach of another store') + '">Overlap ' + pct(o.share) + '</span>';
+});
+
+window.DeskExt.afterDetail.unshift(function (a, r) {
+  var o = get(a), h = '<h4>Catchment overlap</h4>';
+  if (!o.ok) return h + '<p class="muted sm">Pin ' + esc(a.pin) + ' is not in the built-in map data. <button class="link" data-act="geo-open" data-v="' + esc(a.pin) + '">Look it up in the Site finder</button>.</p>';
+  var who = o.near.slice(0, 4).map(function (n) { return n.id + (n.kind === 'approved' ? ' (approved)' : '') + ' ' + n.km.toFixed(1) + ' km'; }).join(', ');
+  var lvl = o.level === 'veto' ? '<p class="ovl-v">Above the ' + pct(Geo.cfg.vetoAt) + ' limit. <b>Suggested outcome: hold</b> until the partner finds a site with less overlap' + (o.bestInPin != null && o.bestInPin < Geo.cfg.vetoAt ? ' (the least-overlapping hexagon in this pin is at ' + pct(o.bestInPin) + ')' : '') + '. This is a suggestion only; the decision above is unchanged.</p>'
+    : o.level === 'flag' ? '<p class="ovl-f">Above the ' + pct(Geo.cfg.flagAt) + ' flag: check the exact site before signing. Decision unchanged.</p>'
+    : '<p class="muted sm">Below the ' + pct(Geo.cfg.flagAt) + ' flag.</p>';
+  return h + '<p>About <b>' + pct(o.share) + '</b> of the estimated crowd within ' + o.radius + ' km of pin ' + esc(a.pin) + ' is already within reach of ' + (who ? esc(who) : 'no store') + '.</p>' + lvl +
+    '<p class="muted sm">Measured from the pin centre (no street address in the form). Radius and limits are placeholders, editable in Site finder, Assumptions.</p>';
+});
+
+window.DeskExt.exportSheets.push(function () {
+  return { name: 'Catchment overlap', rows: [['Application ID', 'Applicant', 'Pin', 'Decision', 'Overlap', 'Level', 'Within reach of']].concat(S.apps.filter(function (a) { return !a.withdrawn && S.run.res[a.id]; }).map(function (a) {
+    var o = get(a); return [a.id, a.name, a.pin, S.run.res[a.id].outcome, o.ok ? pct(o.share) : 'not mapped', o.ok ? { ok: 'below flag', flag: 'flag', veto: 'suggest hold' }[o.level] : '', o.ok ? o.near.map(function (n) { return n.id + ' ' + n.km.toFixed(1) + ' km'; }).join(', ') : ''];
+  })) };
+});
+
+var css = document.createElement('style');
+css.textContent = '.ovl { font-size: 11.5px; font-weight: 600; white-space: nowrap; } .ovl.flag { color: var(--hold); } .ovl.veto { color: var(--no); }' +
+  ' .ovl-v { border-left: 3px solid var(--no); padding: 4px 10px; background: var(--surface2); border-radius: 4px; font-size: 14px; } .ovl-f { border-left: 3px solid var(--hold); padding: 4px 10px; background: var(--surface2); border-radius: 4px; font-size: 14px; }';
+document.head.appendChild(css);
+})();
+
+</script>
+<script>
 /* ext\confidence.js */
 // Confidence badge on every decision, the fragile-decisions list, and side-by-side scenario comparison (Scenarios tab).
 // Logic lives in src/modules/whatif.js.
@@ -3352,6 +3478,74 @@ document.head.appendChild(css);
 
 </script>
 <script>
+/* ext\planner.js */
+// Pipeline plan tab: applicants needed to fill the remaining slots, by territory, from this file's placement rate.
+// Logic in src/modules/planner.js; outreach pins ranked by the Site finder's crowd estimate when available.
+(function () {
+'use strict';
+var D = window.__desk, S = D.S, esc = D.esc, P = window.DeskPlanner, Geo = window.DeskGeo;
+var cfg = JSON.parse(JSON.stringify(P.DEFAULTS));
+function pct(x) { return Math.round(100 * x) + '%'; }
+function crowdAt(p) { return Geo && Geo.data ? Geo.pinCrowd(p, Geo.cfg) : null; }
+function inp(k, val, unit, label) { return '<label class="pp-in"><span>' + label + '</span><input type="number" min="0" step="1" value="' + val + '" data-pp="' + k + '"><small>' + unit + '</small></label>'; }
+
+function tabHtml() {
+  var p = P.plan(S, cfg, crowdAt), short = p.rows.filter(function (r) { return r.gap > 0; });
+  var lo = 0, hi = 0; short.forEach(function (r) { lo += r.range[0] || 0; hi += r.range[1] || 0; });
+  var head = '<div class="pp-tiles">' +
+    '<div><small>Placement rate in this file</small><b>' + pct(p.rate) + '</b><span>' + p.placed + ' placed of ' + p.received + ' received</span></div>' +
+    '<div><small>Open slots left</small><b>' + p.total.open + '</b><span>in ' + short.length + ' territor' + (short.length === 1 ? 'y' : 'ies') + '</span></div>' +
+    '<div><small>New applicants needed</small><b>' + p.total.needed + '</b><span>likely range ' + lo + ' to ' + hi + '</span></div></div>' +
+    '<p class="pp-warn">Small sample: with ' + p.received + ' applications, the true placement rate could be anywhere from ' + pct(p.ci[0]) + ' to ' + pct(p.ci[1]) + ' (90% range), so the counts below are rough. They firm up as more files come in.</p>';
+  var rows = p.rows.map(function (r) {
+    var outreach = r.gap > 0 ? r.pins.slice(0, 3).map(function (x) { return '<button class="chip sm" data-act="geo-open" data-v="' + esc(x.pin) + '">' + esc(x.pin) + (x.crowd != null ? ' · ' + Math.round(x.crowd) : '') + '</button>'; }).join(' ') : '';
+    return '<tr' + (r.gap > 0 ? '' : ' class="pp-done"') + '><td><b>' + esc(r.id) + '</b> ' + esc(r.city) + '<br><span class="prio p-' + r.priority.toLowerCase().slice(0, 3) + '">' + r.priority + '</span></td>' +
+      '<td>' + r.open + ' of ' + r.slots + '</td><td>' + r.received + '</td><td>' + pct(r.rate) + (r.ownRate ? '' : ' <small class="muted">overall</small>') + '</td>' +
+      '<td>' + (r.fixable.length ? r.fixable.map(esc).join(', ') + (r.fromHolds ? ' <small class="muted">(' + r.fromHolds + ' counted)</small>' : '') : '–') + '</td>' +
+      '<td><b>' + (r.gap > 0 ? (r.needed == null ? '?' : r.needed) : 0) + '</b>' + (r.gap > 0 && r.range[0] != null ? ' <small class="muted">' + r.range[0] + ' to ' + (r.range[1] == null ? 'many' : r.range[1]) + '</small>' : '') + '</td>' +
+      '<td>' + (r.gap > 0 ? r.perWeek + '/wk' : '') + '</td><td>' + (outreach || (r.gap > 0 ? '<span class="muted sm">no open pin</span>' : '')) + '</td></tr>';
+  }).join('');
+  var targets = short.map(function (r) {
+    return '<li><b>' + esc(r.id) + ' ' + esc(r.city) + '</b> (' + r.priority.toLowerCase() + ' priority): ' + (r.fixable.length ? 'first chase ' + r.fixable.map(esc).join(', ') + ' (a fixable hold that would take the slot); then ' : '') +
+      'recruit about ' + (r.needed == null ? 'an unknown number of' : r.needed) + ' applicant' + (r.needed === 1 ? '' : 's') + (r.pins.length ? ', starting in pin' + (r.pins.length > 1 ? 's ' : ' ') + r.pins.slice(0, 3).map(function (x) { return x.pin; }).join(', ') : '') + '.</li>';
+  }).join('');
+  return '<div class="pp"><h3>Pipeline plan</h3><p class="muted sm">How many more applicants each territory needs to fill its open slots, using only this file. Highest-priority territories first.</p>' + head +
+    '<div class="tscroll"><table class="cmp pp-t"><thead><tr><th>Territory</th><th>Open slots</th><th>Applied</th><th>Rate used</th><th>Fixable holds</th><th>New applicants needed</th><th>Per week</th><th>Where to recruit (crowd)</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    (targets ? '<h4 class="mt">Outreach targets</h4><ul class="pp-list">' + targets + '</ul>' : '<p>Every territory is full.</p>') +
+    '<details class="sf-box"><summary>Assumptions (editable)</summary><div class="pp-grid">' +
+      inp('ownRateFrom', cfg.ownRateFrom, 'applications', 'Use a territory\'s own rate from') +
+      inp('holdClear', Math.round(cfg.holdClear * 100), '% of fixable holds; default 0 because the file has no history', 'Holds expected to clear') +
+      inp('weeks', cfg.weeks, 'weeks', 'Recruit over') + '</div>' +
+      '<p class="muted sm">Applicants needed = open slots (minus holds expected to clear) divided by the placement rate, rounded up. The range uses the 90% range of the rate. Crowd next to each pin is the Site finder\'s estimate at the pin centre (0 to 100 within the city).</p></details></div>';
+}
+window.DeskExt.tabs.push({ id: 'pipeplan', label: 'Pipeline plan', render: tabHtml });
+
+document.addEventListener('change', function (e) {
+  var k = e.target.getAttribute && e.target.getAttribute('data-pp'); if (!k) return;
+  var v = parseFloat(e.target.value); if (isNaN(v) || v < 0) return;
+  cfg[k] = k === 'holdClear' ? Math.min(100, v) / 100 : v;
+  var b = document.getElementById('tabbody'); if (b) { b.innerHTML = tabHtml(); var d = b.querySelector('.sf-box'); if (d) d.open = true; }
+});
+
+var css = document.createElement('style');
+css.textContent = [
+  '.pp h3 { font-family: var(--display); font-size: 17px; font-weight: 800; } .pp h4.mt { font-family: var(--display); font-size: 15px; margin: 18px 0 6px; }',
+  '.pp-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }',
+  '.pp-tiles > div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }',
+  '.pp-tiles small { font-size: 12px; color: var(--muted); } .pp-tiles b { font-family: var(--display); font-size: 26px; font-weight: 800; line-height: 1.15; } .pp-tiles span { font-size: 12.5px; color: var(--muted); }',
+  '.pp-warn { font-size: 13.5px; border-left: 3px solid var(--hold); background: var(--surface); padding: 6px 10px; border-radius: 4px; }',
+  '.pp-t td, .pp-t th { text-align: left; vertical-align: top; } .pp-t tr.pp-done td { color: var(--muted); }',
+  '.prio.p-med { color: var(--hold); } .prio.p-hig { color: var(--no); }',
+  '.pp-list { padding-left: 18px; font-size: 14px; } .pp-list li { margin-bottom: 5px; }',
+  '.pp-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 18px; margin: 8px 0; }',
+  '.pp-in { display: grid; grid-template-columns: 1fr 64px; gap: 0 8px; align-items: center; font-size: 13px; } .pp-in input { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; background: var(--surface); text-align: right; } .pp-in small { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; }',
+  '@media (max-width: 720px) { .pp-tiles, .pp-grid { grid-template-columns: minmax(0, 1fr); } }'
+].join('\n');
+document.head.appendChild(css);
+})();
+
+</script>
+<script>
 /* ext\reports.js */
 // Reports tab: the question list for applicants (download), one-page decision memos (print), and the weekly summary.
 // Logic in src/modules/report.js; memos also reuse the plan, trigger and confidence modules.
@@ -3504,7 +3698,7 @@ document.head.appendChild(css);
 'use strict';
 var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, Geo = window.DeskGeo;
 if (!Geo || !Geo.data) return;
-var V = { pin: '', query: '', who: null, cfg: Geo.clone(Geo.DEFAULTS) };
+var V = { pin: '', query: '', who: null };
 var live = {};   // live lookups in progress or failed, by pin or place name
 
 // Pins and places outside the built-in data are looked up through api/place.js (hosted page only).
@@ -3526,13 +3720,13 @@ function approvedSites(skipId) {
   if (!S.run) return [];
   return S.apps.filter(function (a) { return !a.withdrawn && a.id !== skipId && S.run.res[a.id] && S.run.res[a.id].outcome === 'Approve'; }).map(function (a) { return { id: a.id, pin: a.pin }; });
 }
-function rec(pin, skipId) { return Geo.recommend(pin, V.cfg, approvedSites(skipId), { skipId: skipId }); }
+function rec(pin, skipId) { return Geo.recommend(pin, Geo.cfg, approvedSites(skipId), { skipId: skipId }); }
 function noSpace(a, r) { return r.outcome === 'Hold' && a.space === 'Not yet identified'; }
 function fallback() { return '<p class="muted sm">Until then, the partner proposes a space and the desk checks it against the rules: pin code, size, floor, and distance from existing stores by pin number.</p>'; }
 
 /* ---------- map ---------- */
 function mapSvg(r) {
-  var c = Geo.city(r.city, V.cfg), inPin = {}; r.cells.forEach(function (i) { inPin[i] = 1; });
+  var c = Geo.city(r.city, Geo.cfg), inPin = {}; r.cells.forEach(function (i) { inPin[i] = 1; });
   var la = r.cells.map(function (i) { return c.ll[i][0]; }), lo = r.cells.map(function (i) { return c.ll[i][1]; });
   var pad = 0.014, box = [Math.min.apply(null, la) - pad, Math.max.apply(null, la) + pad, Math.min.apply(null, lo) - pad, Math.max.apply(null, lo) + pad];
   var lat0 = (box[0] + box[1]) / 2, kx = Math.cos(lat0 * Math.PI / 180), W = 560;
@@ -3563,27 +3757,28 @@ function picksHtml(r) {
   return r.top.map(function (t) {
     var name = t.landmarks.length ? 'Near ' + t.landmarks[0] : 'Around ' + t.lat.toFixed(4) + ', ' + t.lon.toFixed(4);
     return '<li><h4><span class="pickn2">' + t.rank + '</span>' + esc(name) + '</h4>' +
-      '<p class="muted sm">Score ' + Math.round(t.score) + ' = crowd potential ' + Math.round(t.potential) + ' minus ' + Math.round(V.cfg.penalty * 100 * t.overlap) + ' for overlap with existing catchments.</p>' +
+      '<p class="muted sm">Score ' + Math.round(t.score) + ' = crowd potential ' + Math.round(t.potential) + ' minus ' + Math.round(Geo.cfg.penalty * 100 * t.overlap) + ' for overlap with existing catchments.</p>' +
       '<ul>' + t.reason.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' +
       (t.places.length ? '<p class="muted sm">Mapped here: ' + esc(t.places.join(', ')) + '.</p>' : '') + '</li>';
   }).join('');
 }
 function num(path, val, step, unit) { return '<label class="sf-in"><span>' + unit[0] + '</span><input type="number" step="' + step + '" min="0" value="' + val + '" data-geo="' + path + '"><small>' + unit[1] + '</small></label>'; }
 function assumptionsHtml() {
-  var c = V.cfg;
+  var c = Geo.cfg;
   return '<details class="sf-box"><summary>Assumptions (all editable; placeholders until checked against real customer data)</summary><div class="sf-grid">' +
     num('residentShare', Math.round(c.residentShare * 100), 5, ['Residents in the crowd blend', '% (rest is daytime activity)']) +
     num('ring1', c.ring1, 0.05, ['Weight of the 6 touching hexagons', 'x']) + num('ring2', c.ring2, 0.05, ['Weight of the next 12 hexagons', 'x']) +
     num('radius.Tier 1', c.radius['Tier 1'], 0.5, ['Catchment, Tier 1 city', 'km, assumption to verify with customer-origin data']) +
     num('radius.Tier 2', c.radius['Tier 2'], 0.5, ['Catchment, Tier 2 city', 'km, assumption']) + num('radius.Tier 3', c.radius['Tier 3'], 0.5, ['Catchment, Tier 3 city', 'km, assumption']) +
     num('penalty', c.penalty, 0.1, ['Overlap penalty', 'points per 1% of crowd already in a store\'s reach']) +
+    num('flagAt', Math.round(c.flagAt * 100), 5, ['Cannibalisation flag at', '% overlap, assumption']) + num('vetoAt', Math.round(c.vetoAt * 100), 5, ['Suggest a hold at', '% overlap, assumption']) +
     Object.keys(c.act).map(function (k) { return num('act.' + k, c.act[k], 0.1, ['Activity points per ' + { market: 'market', mall: 'mall', supermarket: 'supermarket', busStation: 'bus station', busStop: 'bus stop', rail: 'metro or railway station', college: 'college', hospital: 'hospital', shops: 'mapped shop' }[k], 'pts']); }).join('') +
     '</div><button class="btn sm" data-act="geo-reset">Restore defaults</button></details>';
 }
 function sanityHtml() {
-  var bt = Geo.backtest(V.cfg).filter(function (b) { return b.ok; });
+  var bt = Geo.backtest(Geo.cfg).filter(function (b) { return b.ok; });
   var med = bt.map(function (b) { return b.topPctCity; }).sort(function (a, b) { return a - b; });
-  var m = med.length ? med[Math.floor((med.length - 1) / 2)] : 0, base = Geo.baseline(V.cfg);
+  var m = med.length ? med[Math.floor((med.length - 1) / 2)] : 0, base = Geo.baseline(Geo.cfg);
   var pinMed = bt.map(function (b) { return Math.round(100 * b.rankPin / b.nPin); }).sort(function (a, b) { return a - b; });
   return '<details class="sf-box"><summary>Sanity check: where today\'s 10 stores rank</summary><p class="muted sm">If the crowd estimate means anything, the brand\'s existing stores should sit in busy hexagons. Each store is placed at its pin\'s centre (street addresses are not in the data), and ranked on crowd potential without any spacing penalty.</p>' +
     '<ul class="sm"><li>Median store: top ' + m + '% of its city. For comparison, the centre of a typical other pin ranks top ' + base.medianTop + '% (' + base.n + ' pins), because post offices sit in busy places. So stores beat the baseline, but most of the high rank comes from where pin centres are, and 10 stores is a small sample.</li>' +
@@ -3675,7 +3870,7 @@ document.addEventListener('click', function (e) {
   else if (act === 'geo-retry') { var k = V.query || V.pin; delete live[k]; if (V.query) lookup(V.query, false); body(); }
   else if (act === 'geo-open') show(v, null);
   else if (act === 'geo-app') { var a = D.getApp(v); if (a) show(a.pin, a.id); }
-  else if (act === 'geo-reset') { V.cfg = Geo.clone(Geo.DEFAULTS); body(); }
+  else if (act === 'geo-reset') { Object.assign(Geo.cfg, Geo.clone(Geo.DEFAULTS)); body(); }
   else if (act === 'geo-brief') {
     var who = V.who ? V.who + ' ' + D.getApp(V.who).name : null, txt = Geo.brief(rec(V.pin, V.who), who), label = el.textContent;
     var done = function () { el.textContent = 'Copied'; setTimeout(function () { el.textContent = label; }, 1400); };
@@ -3694,9 +3889,9 @@ function go(text) {
 document.addEventListener('change', function (e) {
   var path = e.target.getAttribute && e.target.getAttribute('data-geo'); if (!path) return;
   var v = parseFloat(e.target.value); if (isNaN(v) || v < 0) return;
-  if (path === 'residentShare') v = Math.min(100, v) / 100;
-  var p = path.split('.'), o = V.cfg; for (var i = 0; i < p.length - 1; i++) o = o[p[i]]; o[p[p.length - 1]] = v;
-  body(); var d = document.querySelector('.sf-box'); if (d) d.open = true;
+  if (path === 'residentShare' || path === 'flagAt' || path === 'vetoAt') v = Math.min(100, v) / 100;
+  var p = path.split('.'), o = Geo.cfg; for (var i = 0; i < p.length - 1; i++) o = o[p[i]]; o[p[p.length - 1]] = v;
+  if (S.tab === 'sites') { body(); var d = document.querySelector('.sf-box'); if (d) d.open = true; } else D.rerender();
 });
 
 var css = document.createElement('style');

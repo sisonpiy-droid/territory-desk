@@ -4,7 +4,7 @@
 'use strict';
 var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, Geo = window.DeskGeo;
 if (!Geo || !Geo.data) return;
-var V = { pin: '', query: '', who: null, cfg: Geo.clone(Geo.DEFAULTS) };
+var V = { pin: '', query: '', who: null };
 var live = {};   // live lookups in progress or failed, by pin or place name
 
 // Pins and places outside the built-in data are looked up through api/place.js (hosted page only).
@@ -26,13 +26,13 @@ function approvedSites(skipId) {
   if (!S.run) return [];
   return S.apps.filter(function (a) { return !a.withdrawn && a.id !== skipId && S.run.res[a.id] && S.run.res[a.id].outcome === 'Approve'; }).map(function (a) { return { id: a.id, pin: a.pin }; });
 }
-function rec(pin, skipId) { return Geo.recommend(pin, V.cfg, approvedSites(skipId), { skipId: skipId }); }
+function rec(pin, skipId) { return Geo.recommend(pin, Geo.cfg, approvedSites(skipId), { skipId: skipId }); }
 function noSpace(a, r) { return r.outcome === 'Hold' && a.space === 'Not yet identified'; }
 function fallback() { return '<p class="muted sm">Until then, the partner proposes a space and the desk checks it against the rules: pin code, size, floor, and distance from existing stores by pin number.</p>'; }
 
 /* ---------- map ---------- */
 function mapSvg(r) {
-  var c = Geo.city(r.city, V.cfg), inPin = {}; r.cells.forEach(function (i) { inPin[i] = 1; });
+  var c = Geo.city(r.city, Geo.cfg), inPin = {}; r.cells.forEach(function (i) { inPin[i] = 1; });
   var la = r.cells.map(function (i) { return c.ll[i][0]; }), lo = r.cells.map(function (i) { return c.ll[i][1]; });
   var pad = 0.014, box = [Math.min.apply(null, la) - pad, Math.max.apply(null, la) + pad, Math.min.apply(null, lo) - pad, Math.max.apply(null, lo) + pad];
   var lat0 = (box[0] + box[1]) / 2, kx = Math.cos(lat0 * Math.PI / 180), W = 560;
@@ -63,27 +63,28 @@ function picksHtml(r) {
   return r.top.map(function (t) {
     var name = t.landmarks.length ? 'Near ' + t.landmarks[0] : 'Around ' + t.lat.toFixed(4) + ', ' + t.lon.toFixed(4);
     return '<li><h4><span class="pickn2">' + t.rank + '</span>' + esc(name) + '</h4>' +
-      '<p class="muted sm">Score ' + Math.round(t.score) + ' = crowd potential ' + Math.round(t.potential) + ' minus ' + Math.round(V.cfg.penalty * 100 * t.overlap) + ' for overlap with existing catchments.</p>' +
+      '<p class="muted sm">Score ' + Math.round(t.score) + ' = crowd potential ' + Math.round(t.potential) + ' minus ' + Math.round(Geo.cfg.penalty * 100 * t.overlap) + ' for overlap with existing catchments.</p>' +
       '<ul>' + t.reason.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' +
       (t.places.length ? '<p class="muted sm">Mapped here: ' + esc(t.places.join(', ')) + '.</p>' : '') + '</li>';
   }).join('');
 }
 function num(path, val, step, unit) { return '<label class="sf-in"><span>' + unit[0] + '</span><input type="number" step="' + step + '" min="0" value="' + val + '" data-geo="' + path + '"><small>' + unit[1] + '</small></label>'; }
 function assumptionsHtml() {
-  var c = V.cfg;
+  var c = Geo.cfg;
   return '<details class="sf-box"><summary>Assumptions (all editable; placeholders until checked against real customer data)</summary><div class="sf-grid">' +
     num('residentShare', Math.round(c.residentShare * 100), 5, ['Residents in the crowd blend', '% (rest is daytime activity)']) +
     num('ring1', c.ring1, 0.05, ['Weight of the 6 touching hexagons', 'x']) + num('ring2', c.ring2, 0.05, ['Weight of the next 12 hexagons', 'x']) +
     num('radius.Tier 1', c.radius['Tier 1'], 0.5, ['Catchment, Tier 1 city', 'km, assumption to verify with customer-origin data']) +
     num('radius.Tier 2', c.radius['Tier 2'], 0.5, ['Catchment, Tier 2 city', 'km, assumption']) + num('radius.Tier 3', c.radius['Tier 3'], 0.5, ['Catchment, Tier 3 city', 'km, assumption']) +
     num('penalty', c.penalty, 0.1, ['Overlap penalty', 'points per 1% of crowd already in a store\'s reach']) +
+    num('flagAt', Math.round(c.flagAt * 100), 5, ['Cannibalisation flag at', '% overlap, assumption']) + num('vetoAt', Math.round(c.vetoAt * 100), 5, ['Suggest a hold at', '% overlap, assumption']) +
     Object.keys(c.act).map(function (k) { return num('act.' + k, c.act[k], 0.1, ['Activity points per ' + { market: 'market', mall: 'mall', supermarket: 'supermarket', busStation: 'bus station', busStop: 'bus stop', rail: 'metro or railway station', college: 'college', hospital: 'hospital', shops: 'mapped shop' }[k], 'pts']); }).join('') +
     '</div><button class="btn sm" data-act="geo-reset">Restore defaults</button></details>';
 }
 function sanityHtml() {
-  var bt = Geo.backtest(V.cfg).filter(function (b) { return b.ok; });
+  var bt = Geo.backtest(Geo.cfg).filter(function (b) { return b.ok; });
   var med = bt.map(function (b) { return b.topPctCity; }).sort(function (a, b) { return a - b; });
-  var m = med.length ? med[Math.floor((med.length - 1) / 2)] : 0, base = Geo.baseline(V.cfg);
+  var m = med.length ? med[Math.floor((med.length - 1) / 2)] : 0, base = Geo.baseline(Geo.cfg);
   var pinMed = bt.map(function (b) { return Math.round(100 * b.rankPin / b.nPin); }).sort(function (a, b) { return a - b; });
   return '<details class="sf-box"><summary>Sanity check: where today\'s 10 stores rank</summary><p class="muted sm">If the crowd estimate means anything, the brand\'s existing stores should sit in busy hexagons. Each store is placed at its pin\'s centre (street addresses are not in the data), and ranked on crowd potential without any spacing penalty.</p>' +
     '<ul class="sm"><li>Median store: top ' + m + '% of its city. For comparison, the centre of a typical other pin ranks top ' + base.medianTop + '% (' + base.n + ' pins), because post offices sit in busy places. So stores beat the baseline, but most of the high rank comes from where pin centres are, and 10 stores is a small sample.</li>' +
@@ -175,7 +176,7 @@ document.addEventListener('click', function (e) {
   else if (act === 'geo-retry') { var k = V.query || V.pin; delete live[k]; if (V.query) lookup(V.query, false); body(); }
   else if (act === 'geo-open') show(v, null);
   else if (act === 'geo-app') { var a = D.getApp(v); if (a) show(a.pin, a.id); }
-  else if (act === 'geo-reset') { V.cfg = Geo.clone(Geo.DEFAULTS); body(); }
+  else if (act === 'geo-reset') { Object.assign(Geo.cfg, Geo.clone(Geo.DEFAULTS)); body(); }
   else if (act === 'geo-brief') {
     var who = V.who ? V.who + ' ' + D.getApp(V.who).name : null, txt = Geo.brief(rec(V.pin, V.who), who), label = el.textContent;
     var done = function () { el.textContent = 'Copied'; setTimeout(function () { el.textContent = label; }, 1400); };
@@ -194,9 +195,9 @@ function go(text) {
 document.addEventListener('change', function (e) {
   var path = e.target.getAttribute && e.target.getAttribute('data-geo'); if (!path) return;
   var v = parseFloat(e.target.value); if (isNaN(v) || v < 0) return;
-  if (path === 'residentShare') v = Math.min(100, v) / 100;
-  var p = path.split('.'), o = V.cfg; for (var i = 0; i < p.length - 1; i++) o = o[p[i]]; o[p[p.length - 1]] = v;
-  body(); var d = document.querySelector('.sf-box'); if (d) d.open = true;
+  if (path === 'residentShare' || path === 'flagAt' || path === 'vetoAt') v = Math.min(100, v) / 100;
+  var p = path.split('.'), o = Geo.cfg; for (var i = 0; i < p.length - 1; i++) o = o[p[i]]; o[p[p.length - 1]] = v;
+  if (S.tab === 'sites') { body(); var d = document.querySelector('.sf-box'); if (d) d.open = true; } else D.rerender();
 });
 
 var css = document.createElement('style');

@@ -11,7 +11,8 @@ var DEFAULTS = {
   ring1: 0.5, ring2: 0.25,                  // weight of neighbouring cells in crowd potential
   radius: { 'Tier 1': 2, 'Tier 2': 3, 'Tier 3': 5 },   // store catchment, km: placeholder, to verify with customer-origin data
   penalty: 1,                               // points lost per 1% of the catchment's crowd already within reach of a store
-  act: { market: 3, mall: 4, supermarket: 2, busStation: 3, busStop: 0.5, rail: 4, college: 2, hospital: 2, shops: 0.2 }   // activity points per place
+  act: { market: 3, mall: 4, supermarket: 2, busStation: 3, busStop: 0.5, rail: 4, college: 2, hospital: 2, shops: 0.2 },   // activity points per place
+  flagAt: 0.4, vetoAt: 0.6                  // cannibalisation tolerance: flag, and suggest a hold, at this share of overlap (placeholders)
 };
 var KIND_LABEL = { market: 'market', mall: 'mall', supermarket: 'supermarket', busStation: 'bus station', busStop: 'bus stop', rail: 'metro or railway station', college: 'college', hospital: 'hospital', shops: 'shop' };
 
@@ -147,6 +148,29 @@ function baseline(cfg) {
   return { n: tops.length, medianTop: tops.length ? tops[Math.floor((tops.length - 1) / 2)] : null };
 }
 
+// Crowd potential (0 to 100 within its city) at a pin's centre, or null when the pin is not mapped
+function pinCrowd(pin, cfg) {
+  var p = pinInfo(pin); if (!p) return null;
+  var c = city(p.city, cfg || DEFAULTS), i = cellAt(c, p.lat, p.lon);
+  return i < 0 ? null : c.potential[i];
+}
+
+/* ---------- cannibalisation: overlap at an applicant's pin ---------- */
+// The applicant is placed at the centre of their pin (no street address in the form). Competition: existing stores plus
+// partners approved in this session, minus the applicant. Also reports the least-overlapping hexagon in the same pin.
+function applicantOverlap(pin, others, cfg, skipId) {
+  cfg = cfg || DEFAULTS;
+  var p = pinInfo(pin); if (!p) return { ok: false };
+  var c = city(p.city, cfg), i = cellAt(c, p.lat, p.lon); if (i < 0) return { ok: false };
+  var R = cfg.radius[c.tier] || 3, ss = sites(others).filter(function (s) { return s.id !== skipId; });
+  var o = overlap(c, i, R, ss, skipId);
+  var near = ss.map(function (s) { return { id: s.id, kind: s.kind, km: km(c.ll[i], [s.lat, s.lon]) }; }).filter(function (s) { return s.km <= 2 * R; }).sort(function (a, b) { return a.km - b.km; });
+  var best = null;
+  (c.pins[pin] || []).forEach(function (j) { var oj = overlap(c, j, R, ss, skipId).share; if (!best || oj < best.share) best = { share: oj, i: j }; });
+  var level = o.share >= cfg.vetoAt ? 'veto' : o.share >= cfg.flagAt ? 'flag' : 'ok';
+  return { ok: true, share: o.share, level: level, radius: R, city: c.name, near: near, bestInPin: best ? best.share : null, live: c.live };
+}
+
 /* ---------- a plain search brief for the partner ---------- */
 function brief(rec, who) {
   if (!rec.ok) return rec.why;
@@ -161,7 +185,7 @@ function brief(rec, who) {
   return lines.join('\n');
 }
 
-var api = { DEFAULTS: DEFAULTS, clone: clone, km: km, city: city, pinInfo: pinInfo, sites: sites, overlap: overlap, recommend: recommend, backtest: backtest, baseline: baseline, brief: brief, addArea: addArea, data: G };
+var api = { DEFAULTS: DEFAULTS, clone: clone, km: km, city: city, pinInfo: pinInfo, sites: sites, overlap: overlap, recommend: recommend, backtest: backtest, baseline: baseline, brief: brief, addArea: addArea, applicantOverlap: applicantOverlap, pinCrowd: pinCrowd, cfg: clone(DEFAULTS), data: G };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.DeskGeo = api;
 })(typeof window !== 'undefined' ? window : globalThis);
