@@ -16,7 +16,7 @@ Part 2: they ask in plain language ("Why is APP-007 on hold?") and give new info
 Submission closes Monday 26 October 2026 in the morning. We are doing ALL phases below, then the extras. Hard feature freeze is Sunday 6 pm; after that only bug fixes, the demo video and the final test. If time runs short, cut extras, never phases.
 - Two of us run separate Claude Code sessions on separate git branches. Session A owns Phases 1 and 2 and extras 1 to 3. Session B owns Phases 3 and 4 and extras 4 to 7. If I have not told you which session you are, ask me before starting.
 - To avoid merge conflicts, put new code in its own files: pure logic in src/modules/*.js, UI additions in src/ext/*.js. build.js inlines them in order (engine, sample, modules, ui, ext). Hook into the app through window.DeskExt (afterSummary, tabs, afterRender, answerers) and window.__desk. Edit engine.js, ui.js or template.html only where a feature genuinely needs it, keep those edits small, commit often, and pull and merge main at the end of every phase.
-- Deploy to the static host after every phase, so there is always a submittable link. Never leave main broken.
+- Deploy after every phase (push to main on GitHub; Vercel deploys main automatically), so there is always a submittable link. Never leave main broken.
 - After every phase: run `npm run check`, take Playwright screenshots at 1360px and 390px in light and dark, commit, and tell me in plain English what changed, what to look at, and any decision you need from me. Do not start the next phase until I say go.
 
 ## Rules
@@ -43,7 +43,7 @@ After an upload, the first thing on screen is an operations view above the decis
 ## Phase 3 (Session B): reliability, non-negotiable
 - Add stress files (blank cells, numbers as text, odd headers, trailing spaces, 100+ rows, a missing sheet) and a bank of 40 or more phrasings of "why", "what if" and "who is competing" as automated tests.
 - Remove external runtime dependencies: vendor SheetJS and serve it from the same origin so a CDN outage cannot break a judge's test. Fonts must degrade gracefully.
-- Deploy to Netlify, open the link in a private window on a laptop and a phone, and keep it live until the end of Wednesday 28 October 2026 (IST).
+- Check the Vercel production link, open it in a private window on a laptop and a phone, and keep it live until the end of Wednesday 28 October 2026 (IST).
 
 ## Phase 4 (Session B): the AI layer
 Improve how follow-ups are understood: broader phrasing, typo tolerance, several changes in one sentence, and an "I read this as…" confirmation for ambiguous requests. If a language model is used at all, it is an optional fallback behind a serverless function (key in an environment variable, never in the client), with a short timeout, output mapped onto the same update functions, and a silent fallback to the rule-based path. Every core flow must work with it switched off.

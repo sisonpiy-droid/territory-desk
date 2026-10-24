@@ -46,3 +46,6 @@ Approve (eligible and wins its pin and a slot), Waitlist (eligible but lost the 
 
 ## Style
 UI copy is for a franchise expansion manager: sentence case, plain verbs, no "AI-powered", "engine" or "model" in the interface. Keep the pin board and the existing visual language.
+
+## Hosting
+Code is on GitHub (sisonpiy-droid/territory-desk). Vercel builds every push (vercel.json: `node build.js`, output `dist`, no install step). Only main goes to the production link judges use; branch pushes get preview links. Merge to main only when `npm run check` passes.
