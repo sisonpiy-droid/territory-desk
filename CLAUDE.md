@@ -55,3 +55,10 @@ UI copy is for a franchise expansion manager: sentence case, plain verbs, no "AI
 
 ## Hosting
 Code is on GitHub (sisonpiy-droid/territory-desk). Vercel builds every push (vercel.json: `node build.js`, output `dist`, no install step). Only main goes to the production link judges use; branch pushes get preview links. Merge to main only when `npm run check` passes.
+
+## Status for Session B (updated 24 Oct 2026 by Session A)
+Session A has merged Phases 1 and 2 and extras 1 to 3 into main. Before starting, run `git pull origin main` and `npm install`, then `npm run check`.
+- engine.js and ui.js were edited (overrides in allocation; hooks afterDetail, afterRecompute, exportSheets, rowBadges). Add to them only through new hooks where you can.
+- Tests now include test/ops.js, test/phase2.js and test/extras.js; keep them passing.
+- Phase 3 asked for Netlify: we host on Vercel instead (see Hosting). Vendored SheetJS should be served from dist/ so Vercel serves it from the same origin.
+- The demo (link#demo) uses DeskExt answerers and the Ask box; if Phase 4 changes how follow-ups are parsed, run the demo once to confirm "Why is APP-007 on hold?" and "APP-012 has now found a ground-floor space" still behave.
