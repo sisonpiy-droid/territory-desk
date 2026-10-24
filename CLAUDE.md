@@ -61,5 +61,9 @@ Code is on GitHub (sisonpiy-droid/territory-desk). Vercel builds every push (ver
 - test-data/stress/ (made by `npm run stress`): blank cells, numbers as text, odd headers, trailing spaces, 150 rows, missing sheet. test/stress.js checks them; test/phrasings.js runs 47 follow-up phrasings; `npm run e2e` uploads every file in laptop and phone browsers with outside hosts blocked; `npm run e2e:live` does the same against the live link.
 - SheetJS is vendored (vendor/, copied to dist/ by build.js). Google Fonts load without blocking; system fonts (including Nirmala UI for Kannada and Hindi) take over if they fail.
 
+## Follow-up understanding (Phase 4)
+- src/modules/understand.js (typo fixes against a small vocabulary, ID forms like "app 12" or "territory 2", synonyms, clause splitting, hypotheticals) and src/ext/understand.js (answerer tried first). Several changes in one sentence apply with one undo; anything uncertain (spelling fixed, name instead of ID, unusual numbers, pin outside the city) shows "I read this as" with Yes/No and changes nothing until Yes. "Would ... if ...?" previews without changing. No language model is used.
+- ui.js exposes answer, findIds, findTers, parseFields, parseTerritoryChange, applyAppFields, diffHtml, explainCard on window.__desk.
+
 ## Status (25 Oct 2026)
-Phases 1, 2 and 3 and extras 1 to 3 are merged to main and live. One session is now building every phase; there is no separate Session B. Next: Phase 4 (follow-up understanding), then extras 4 to 7.
+Phases 1 to 4 and extras 1 to 3 are merged to main and live. One session is now building every phase; there is no separate Session B. Next: extras 4 to 7.

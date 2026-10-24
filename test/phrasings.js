@@ -64,13 +64,41 @@ const RIVALS = [
   ['How confident is APP-008?', /APP-008.*medium confidence/i]
 ];
 
+// Typos, other ID forms, several changes at once, and the "I read this as" check. click: press Yes or No on the card first.
+const BROAD = [
+  ['why is aplication 7 on hld', /I read this as.*APP-007.*no shop space/i],
+  ['who is compteing with app 2', /APP-002.*APP-001/i],
+  ['whats the reson for APP-13', /APP-013.*upper-floor/i],
+  ['Why is application number 11 rejected?', /APP-011.*investment far below/i],
+  ['tell me about territory 2', /TER-02.*slots filled/i],
+  ['app 12 has fund a grund flor shop', /I read this as.*APP-012.*ground floor.*Nothing has changed yet/i, { 'APP-012': 'Hold' }],
+  ['app 12 has fund a grund flor shop', /Recorded/i, { 'APP-012': 'Approve' }, 'yes'],
+  ['app 12 has fund a grund flor shop', /nothing changed/i, { 'APP-012': 'Hold' }, 'no'],
+  ['APP-012 found a 400 sqft ground floor shop and APP-010 can now invest 25 lakhs', /Recorded 2 changes/i, { 'APP-012': 'Approve', 'APP-010': 'Approve' }],
+  ['APP-002 quit; give territory 2 another store', /Recorded 2 changes.*has withdrawn.*open slots 1 to 2/i, { 'APP-001': 'Approve', 'APP-019': 'Approve' }],
+  ['APP-012 found a shop, APP-013 moved to a ground floor shop and TER-02 has 1 more slot', /Recorded 3 changes/i, { 'APP-013': 'Approve', 'APP-019': 'Approve' }],
+  ['what if APP-010 invests 25 lakh and TER-02 gets another slot', /Recorded 2 changes/i, { 'APP-010': 'Approve', 'APP-019': 'Approve' }],
+  ['APP-10 raised another 2 lakh', /Rs 20 lakh.*\(Rs 18 \+ 2\)/i],
+  ['Would APP-012 be approved if she found a ground floor shop?', /would move.*Hold.*Approve.*Nothing has changed yet/i, { 'APP-012': 'Hold' }],
+  ['Would APP-012 be approved if she found a ground floor shop?', /Recorded/i, { 'APP-012': 'Approve' }, 'yes'],
+  ['Meera found a ground floor shop', /matched the name to APP-012/i, { 'APP-012': 'Hold' }],
+  ['APP-010 can now invest 2500 lakh', /unusual for one store/i, { 'APP-010': 'Hold' }],
+  ['APP-012 has found a ground floor shop at pin 560050', /not in Tumakuru/i],
+  ['APP-012 is doing much better now', /could not tell what changed/i],
+  ['APP-002 is not going ahead', /withdrawn/i, { 'APP-001': 'Approve' }],
+  ['TER-02 can take 2 more stores', /open slots 1 to 3/i, { 'APP-019': 'Approve' }]
+];
+
 let pass = 0, fail = 0;
-[['why', WHY], ['what if', WHATIF], ['who is competing', RIVALS]].forEach(([g, list]) => {
+[['why', WHY], ['what if', WHATIF], ['who is competing', RIVALS], ['typos, several changes, checks', BROAD]].forEach(([g, list]) => {
   console.log('Follow-ups: ' + g + ' (' + list.length + ')');
-  list.forEach(([q, rx, expect]) => {
+  list.forEach(([q, rx, expect, click]) => {
     fresh();
     let a, why = '';
-    try { a = ask(q); } catch (e) { a = 'THREW ' + e.message; }
+    try {
+      a = ask(q);
+      if (click) { const b = d.querySelector('.msg.desk:last-child [data-act="und-' + click + '"]') || [...d.querySelectorAll('[data-act="und-' + click + '"]')].pop(); b.dispatchEvent(new w.MouseEvent('click', { bubbles: true })); const m = [...d.querySelectorAll('.msg.desk')]; a = m[m.length - 1].textContent.replace(/\s+/g, ' '); }
+    } catch (e) { a = 'THREW ' + e.message; }
     if (!rx.test(a)) why = 'answer did not match ' + rx + ': ' + a.slice(0, 160);
     if (!why && expect) Object.keys(expect).forEach(id => { if (out(id) !== expect[id]) why = id + ' is ' + out(id) + ', expected ' + expect[id]; });
     if (why) { fail++; console.log('  FAIL', JSON.stringify(q), '\n       ', why); } else pass++;
