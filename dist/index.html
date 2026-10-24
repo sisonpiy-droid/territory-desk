@@ -1190,7 +1190,7 @@ function placesIn(c, i) {
 function reason(t, c, R, nCells) {
   var bits = [];
   bits.push('Crowd potential (this hexagon plus its neighbours) ranks ' + t.potRank + ' of ' + nCells + ' in this pin; the hexagon itself is busier than ' + t.crowdPct + '% of the pin (estimated crowd ' + Math.round(t.crowd) + ' of 100' + (c.basis ? ', ' + c.basis : '') + ').');
-  if (t.strong) bits.push(t.strong + ' of its 6 neighbouring hexagons are among the busiest quarter of ' + c.name + '.');
+  if (t.strong) bits.push(t.strong + ' of its 6 neighbouring hexagons are among the busiest quarter of ' + (c.live ? 'this area' : c.name) + '.');
   if (t.nearest) bits.push('Nearest ' + (t.nearest.kind === 'store' ? 'store' : 'approved partner') + ' ' + t.nearest.id + ' is ' + t.nearest.km.toFixed(1) + ' km away; ' + Math.round(100 * t.overlap) + '% of the crowd within ' + R + ' km is already within its reach.');
   else bits.push('No store or approved partner within 50 km, so no catchment overlap.');
   if (t.landmarks.length) bits.push('Near ' + t.landmarks.join(', ') + '.');
@@ -3561,8 +3561,8 @@ function mapSvg(r) {
 /* ---------- panels ---------- */
 function picksHtml(r) {
   return r.top.map(function (t) {
-    var name = t.landmarks.length ? 'near ' + t.landmarks[0] : t.lat.toFixed(4) + ', ' + t.lon.toFixed(4);
-    return '<li><h4><span class="pickn2">' + t.rank + '</span>Around ' + esc(name) + '</h4>' +
+    var name = t.landmarks.length ? 'Near ' + t.landmarks[0] : 'Around ' + t.lat.toFixed(4) + ', ' + t.lon.toFixed(4);
+    return '<li><h4><span class="pickn2">' + t.rank + '</span>' + esc(name) + '</h4>' +
       '<p class="muted sm">Score ' + Math.round(t.score) + ' = crowd potential ' + Math.round(t.potential) + ' minus ' + Math.round(V.cfg.penalty * 100 * t.overlap) + ' for overlap with existing catchments.</p>' +
       '<ul>' + t.reason.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' +
       (t.places.length ? '<p class="muted sm">Mapped here: ' + esc(t.places.join(', ')) + '.</p>' : '') + '</li>';

@@ -111,7 +111,7 @@ function placesIn(c, i) {
 function reason(t, c, R, nCells) {
   var bits = [];
   bits.push('Crowd potential (this hexagon plus its neighbours) ranks ' + t.potRank + ' of ' + nCells + ' in this pin; the hexagon itself is busier than ' + t.crowdPct + '% of the pin (estimated crowd ' + Math.round(t.crowd) + ' of 100' + (c.basis ? ', ' + c.basis : '') + ').');
-  if (t.strong) bits.push(t.strong + ' of its 6 neighbouring hexagons are among the busiest quarter of ' + c.name + '.');
+  if (t.strong) bits.push(t.strong + ' of its 6 neighbouring hexagons are among the busiest quarter of ' + (c.live ? 'this area' : c.name) + '.');
   if (t.nearest) bits.push('Nearest ' + (t.nearest.kind === 'store' ? 'store' : 'approved partner') + ' ' + t.nearest.id + ' is ' + t.nearest.km.toFixed(1) + ' km away; ' + Math.round(100 * t.overlap) + '% of the crowd within ' + R + ' km is already within its reach.');
   else bits.push('No store or approved partner within 50 km, so no catchment overlap.');
   if (t.landmarks.length) bits.push('Near ' + t.landmarks.join(', ') + '.');

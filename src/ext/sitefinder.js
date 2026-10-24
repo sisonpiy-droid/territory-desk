@@ -61,8 +61,8 @@ function mapSvg(r) {
 /* ---------- panels ---------- */
 function picksHtml(r) {
   return r.top.map(function (t) {
-    var name = t.landmarks.length ? 'near ' + t.landmarks[0] : t.lat.toFixed(4) + ', ' + t.lon.toFixed(4);
-    return '<li><h4><span class="pickn2">' + t.rank + '</span>Around ' + esc(name) + '</h4>' +
+    var name = t.landmarks.length ? 'Near ' + t.landmarks[0] : 'Around ' + t.lat.toFixed(4) + ', ' + t.lon.toFixed(4);
+    return '<li><h4><span class="pickn2">' + t.rank + '</span>' + esc(name) + '</h4>' +
       '<p class="muted sm">Score ' + Math.round(t.score) + ' = crowd potential ' + Math.round(t.potential) + ' minus ' + Math.round(V.cfg.penalty * 100 * t.overlap) + ' for overlap with existing catchments.</p>' +
       '<ul>' + t.reason.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' +
       (t.places.length ? '<p class="muted sm">Mapped here: ' + esc(t.places.join(', ')) + '.</p>' : '') + '</li>';
