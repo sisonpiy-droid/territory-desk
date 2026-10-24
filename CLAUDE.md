@@ -56,9 +56,10 @@ UI copy is for a franchise expansion manager: sentence case, plain verbs, no "AI
 ## Hosting
 Code is on GitHub (sisonpiy-droid/territory-desk). Vercel builds every push (vercel.json: `node build.js`, output `dist`, no install step). Only main goes to the production link judges use; branch pushes get preview links. Merge to main only when `npm run check` passes.
 
-## Status for Session B (updated 24 Oct 2026 by Session A)
-Session A has merged Phases 1 and 2 and extras 1 to 3 into main. Before starting, run `git pull origin main` and `npm install`, then `npm run check`.
-- engine.js and ui.js were edited (overrides in allocation; hooks afterDetail, afterRecompute, exportSheets, rowBadges). Add to them only through new hooks where you can.
-- Tests now include test/ops.js, test/phase2.js and test/extras.js; keep them passing.
-- Phase 3 asked for Netlify: we host on Vercel instead (see Hosting). Vendored SheetJS should be served from dist/ so Vercel serves it from the same origin.
-- The demo (link#demo) uses DeskExt answerers and the Ask box; if Phase 4 changes how follow-ups are parsed, run the demo once to confirm "Why is APP-007 on hold?" and "APP-012 has now found a ground-floor space" still behave.
+## Reliability (Phase 3)
+- Upload path: E.pickSheets finds the Applications and Territories sheets by their header row (any sheet names); headers accept common variants; investment reads lakh, rupees and crore; blank, text and padded cells are handled.
+- test-data/stress/ (made by `npm run stress`): blank cells, numbers as text, odd headers, trailing spaces, 150 rows, missing sheet. test/stress.js checks them; test/phrasings.js runs 47 follow-up phrasings; `npm run e2e` uploads every file in laptop and phone browsers with outside hosts blocked; `npm run e2e:live` does the same against the live link.
+- SheetJS is vendored (vendor/, copied to dist/ by build.js). Google Fonts load without blocking; system fonts (including Nirmala UI for Kannada and Hindi) take over if they fail.
+
+## Status (25 Oct 2026)
+Phases 1, 2 and 3 and extras 1 to 3 are merged to main and live. One session is now building every phase; there is no separate Session B. Next: Phase 4 (follow-up understanding), then extras 4 to 7.
