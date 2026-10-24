@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Territory Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500&family=Noto+Sans+Kannada:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #eef1f5; --surface: #ffffff; --surface2: #f5f7fa; --ink: #16202c; --muted: #5d6b7a; --line: #d8dee6;
+  --accent: #2447b8; --accent-ink: #ffffff;
+  --ok: #17794f; --wait: #6a4fb0; --hold: #a8620a; --no: #b42318; --gone: #7b8794;
+  --display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --body: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151c; --surface: #171f28; --surface2: #1d2631; --ink: #e6ebf1; --muted: #9aa8b7; --line: #2b3745;
+    --accent: #8aa4ff; --accent-ink: #0f151c; --ok: #4cc38a; --wait: #a995ee; --hold: #e5a649; --no: #f2877e; --gone: #8a97a5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151c; --surface: #171f28; --surface2: #1d2631; --ink: #e6ebf1; --muted: #9aa8b7; --line: #2b3745;
+  --accent: #8aa4ff; --accent-ink: #0f151c; --ok: #4cc38a; --wait: #a995ee; --hold: #e5a649; --no: #f2877e; --gone: #8a97a5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: calc(72px + env(safe-area-inset-top, 0px)); }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums;
+  padding-bottom: env(safe-area-inset-bottom, 0px); }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+p { margin: 0 0 8px; }
+.muted { color: var(--muted); } .sm { font-size: 13px; } .pad { padding: 18px; }
+.grow { flex: 1; }
+
+/* top bar */
+.top { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line);
+  padding: calc(10px + env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px)) 10px max(18px, env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: -0.01em; }
+.brand small { font-family: var(--body); font-weight: 400; font-size: 13px; color: var(--muted); letter-spacing: 0; }
+.logo { width: 26px; height: 26px; }
+.top .actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 600; font-size: 14px; }
+.btn:hover { border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.sm { padding: 5px 11px; font-size: 13px; }
+.btn[disabled], .link[disabled] { opacity: .4; cursor: default; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; font-size: inherit; text-align: left; }
+#err { margin: 12px max(18px, env(safe-area-inset-left, 0px)) 0; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--no); color: var(--no); background: color-mix(in srgb, var(--no) 8%, var(--surface)); }
+
+/* empty state */
+.empty { max-width: 760px; margin: 0 auto; padding: 8vh 22px 10vh; }
+.empty h1 { font-family: var(--display); font-weight: 800; font-size: clamp(32px, 5.4vw, 52px); line-height: 1.04; letter-spacing: -0.02em; margin-bottom: 16px; }
+.lede { font-size: 17px; color: var(--muted); max-width: 60ch; }
+.lede.sm { font-size: 14.5px; margin-bottom: 14px; }
+.drop { margin-top: 26px; border: 2px dashed var(--line); border-radius: 14px; padding: 30px 22px; display: flex; gap: 14px; align-items: center; justify-content: center; flex-wrap: wrap; background: var(--surface); }
+.drop span { color: var(--muted); }
+.fine { margin-top: 16px; font-size: 13px; color: var(--muted); }
+
+/* workspace */
+.workspace { max-width: 1480px; margin: 0 auto; padding: 18px max(18px, env(safe-area-inset-right, 0px)) 40px max(18px, env(safe-area-inset-left, 0px)); display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 22px; align-items: start; }
+.primary { min-width: 0; }
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+.sum-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.sum-top h2 { font-family: var(--display); font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+.sum-meta { font-size: 13.5px; color: var(--muted); }
+.bar { display: flex; gap: 3px; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface2); }
+.seg { display: block; min-width: 6px; background: var(--c, var(--gone)); }
+.legend { display: flex; gap: 4px 16px; flex-wrap: wrap; margin-top: 10px; }
+.leg { background: none; border: 0; padding: 2px 0; display: inline-flex; align-items: center; gap: 7px; font-size: 14px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); display: inline-block; }
+.ok { --c: var(--ok); } .wait { --c: var(--wait); } .hold { --c: var(--hold); } .no { --c: var(--no); } .gone { --c: var(--gone); }
+.notices { margin-bottom: 12px; }
+.notices p { font-size: 13.5px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--hold); border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; }
+
+.tabs { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 14px; overflow-x: auto; }
+.tabs .btn { flex: none; white-space: nowrap; margin-bottom: 4px; }
+.tab { white-space: nowrap; background: none; border: 0; padding: 10px 14px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab.on { color: var(--ink); border-bottom-color: var(--accent); }
+.toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 10px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: 13.5px; font-weight: 500; text-align: left; }
+.chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.search { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 12px; min-width: 220px; }
+
+/* decision rows */
+.rows { display: flex; flex-direction: column; gap: 6px; }
+.row { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.row.open { border-color: var(--accent); }
+.row.gone { opacity: .7; }
+.row-h { width: 100%; display: grid; grid-template-columns: 74px minmax(130px, 1.1fr) auto 44px minmax(0, 2.3fr) 14px; gap: 12px; align-items: center; background: none; border: 0; text-align: left; padding: 11px 14px; }
+.row.gone .row-h { grid-template-columns: 74px minmax(130px, 1.1fr) auto 1fr; padding: 11px 14px; display: grid; }
+.rid { font-weight: 600; white-space: nowrap; }
+.rname { display: flex; flex-direction: column; line-height: 1.25; font-weight: 500; }
+.rname small { color: var(--muted); font-weight: 400; font-size: 12.5px; }
+.rout { display: flex; align-items: center; gap: 8px; }
+.was { font-size: 12px; color: var(--muted); }
+.score { font-family: var(--display); font-weight: 800; font-size: 18px; text-align: right; }
+.score.off { color: var(--muted); font-weight: 400; }
+.rwhy { color: var(--muted); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.open .rwhy { white-space: normal; }
+.chev { width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); justify-self: center; transition: transform .15s; }
+.row.open .chev { transform: rotate(-135deg); }
+.pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--c); background: color-mix(in srgb, var(--c) 13%, var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); white-space: nowrap; }
+.pill.sm { padding: 0 8px; font-size: 12px; }
+
+.detail { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 26px; padding: 6px 18px 20px; border-top: 1px solid var(--line); }
+.detail h4 { font-family: var(--display); font-size: 15px; margin: 16px 0 6px; }
+.detail h4:first-child { margin-top: 12px; }
+.dcol p { font-size: 14.5px; }
+.cond { background: var(--surface2); border-radius: 6px; padding: 8px 10px; font-size: 13.5px !important; }
+.tl { list-style: none; margin: 8px 0; padding: 0; }
+.tl li { border-left: 2px solid var(--line); padding: 0 0 12px 14px; position: relative; font-size: 14.5px; }
+.tl li::before { content: ""; position: absolute; left: -6px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.tl li b { font-weight: 600; margin-right: 6px; }
+.tl li span { display: block; color: var(--muted); font-size: 13.5px; }
+.bp { margin-bottom: 9px; }
+.bp-l { display: flex; justify-content: space-between; font-size: 13.5px; }
+.bp-l small { color: var(--muted); font-weight: 400; }
+.track { height: 6px; border-radius: 3px; background: var(--surface2); overflow: hidden; margin: 3px 0 2px; border: 1px solid var(--line); }
+.track i { display: block; height: 100%; background: var(--accent); }
+.flags { list-style: none; padding: 0; margin: 0; }
+.fl { display: flex; gap: 9px; font-size: 13.5px; margin-bottom: 6px; }
+.fdot { flex: none; width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; background: var(--gone); }
+.fl.hold .fdot { background: var(--hold); } .fl.reject .fdot { background: var(--no); } .fl.soft .fdot { background: var(--wait); } .fl.clean .fdot { background: var(--ok); }
+.seg-g { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+.seg-b { background: var(--surface); border: 0; padding: 4px 12px; font-size: 13px; font-weight: 600; }
+.seg-b.on { background: var(--accent); color: var(--accent-ink); }
+.letter { background: var(--surface2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 14.5px; line-height: 1.6; margin-bottom: 8px; }
+.letter[lang="hi"] { font-family: 'Noto Sans Devanagari', var(--body); }
+.letter[lang="kn"] { font-family: 'Noto Sans Kannada', var(--body); }
+.rec { display: grid; grid-template-columns: 130px 1fr; gap: 3px 10px; font-size: 13.5px; margin: 0; }
+.rec dt { color: var(--muted); } .rec dd { margin: 0; }
+
+/* pin board */
+.b-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+.b-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.b-legend .tile { width: 24px; height: 16px; padding: 0; border-radius: 4px; }
+.board { display: flex; flex-direction: column; gap: 14px; }
+.terr { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px 16px; margin-bottom: 0; }
+.terr header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.terr h3 { font-family: var(--display); font-size: 17px; font-weight: 800; }
+.slots { display: flex; align-items: center; gap: 8px; }
+.dots { display: inline-flex; gap: 4px; }
+.sdot { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--ok); display: block; }
+.sdot.on { background: var(--ok); }
+.slots small { color: var(--muted); font-size: 12.5px; }
+.tiles, .outside { display: flex; flex-wrap: wrap; gap: 8px; }
+.tile { position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; width: 104px; height: 64px; padding: 7px 10px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); text-align: left; }
+.tile b { font-family: var(--display); font-weight: 600; font-size: 17px; color: var(--muted); letter-spacing: 0.01em; }
+.tile b u { text-decoration: none; font-weight: 800; color: var(--ink); }
+.tile span { font-size: 12.5px; font-weight: 600; }
+.tile em { position: absolute; bottom: 7px; right: 9px; font-style: normal; font-size: 12px; font-weight: 600; color: var(--wait); }
+.t-open span { color: var(--muted); font-weight: 400; }
+.t-store { border-style: dashed; background: repeating-linear-gradient(135deg, var(--surface2) 0 6px, var(--surface) 6px 12px); }
+.t-store span { color: var(--muted); }
+.t-ok { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, var(--surface)); } .t-ok span { color: var(--ok); }
+.t-wait { border-color: var(--wait); background: color-mix(in srgb, var(--wait) 11%, var(--surface)); } .t-wait span { color: var(--wait); }
+.t-hold { border-color: var(--hold); border-style: dotted; background: color-mix(in srgb, var(--hold) 9%, var(--surface)); } .t-hold span { color: var(--hold); }
+button.tile:hover { transform: translateY(-1px); }
+
+/* assumptions */
+.assume .a-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.assume section { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.assume section.wide { grid-column: 1 / -1; }
+.assume h4 { font-family: var(--display); font-size: 15px; margin-bottom: 8px; }
+.assume h4.mt { margin: 22px 0 8px; }
+.a-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 14px; }
+.fld { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.fld input { width: 74px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); text-align: right; }
+.w-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 22px; }
+.rules { padding-left: 20px; font-size: 14px; color: var(--muted); }
+.rules li { margin-bottom: 4px; }
+
+/* ask panel */
+.ask { position: sticky; top: calc(66px + env(safe-area-inset-top, 0px)); }
+.ask-in { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 92px); }
+.ask-in h2 { font-family: var(--display); font-size: 19px; font-weight: 800; }
+.log { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 96px; flex: 1 1 auto; padding-right: 2px; }
+.msg { border-radius: 10px; padding: 9px 12px; font-size: 14px; max-width: 100%; }
+.msg p { font-size: 14px; margin-bottom: 6px; } .msg p:last-child { margin-bottom: 0; }
+.msg.me { align-self: flex-end; background: var(--accent); color: var(--accent-ink); max-width: 88%; }
+.msg.desk { background: var(--surface2); border: 1px solid var(--line); }
+.msg .nx { color: var(--muted); }
+.msg .ap { font-weight: 500; }
+.diff { list-style: none; padding: 0; margin: 4px 0 8px; font-size: 13.5px; }
+.diff li { padding: 3px 0; }
+.sugg { display: flex; flex-wrap: wrap; gap: 6px; }
+.composer { display: flex; gap: 8px; }
+.composer input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+.ask-tools { display: flex; justify-content: space-between; font-size: 13px; }
+.cmp { border-collapse: collapse; font-size: 13.5px; width: 100%; }
+.cmp th, .cmp td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+.cmp th:first-child, .cmp td:first-child { text-align: left; }
+.cmp .tot td { font-weight: 600; }
+
+@media (max-width: 1060px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .ask { position: static; }
+  .ask-in { max-height: none; }
+  .log { max-height: 420px; }
+  .detail { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+@media (max-width: 720px) {
+  .row-h { grid-template-columns: auto minmax(0, 1fr) auto 14px; row-gap: 4px; }
+  .brand small { display: none; }
+  .row-h .score { display: none; }
+  .row-h .rwhy { grid-column: 1 / -1; white-space: normal; }
+  .rout { grid-column: 3; }
+  .assume .a-grid { grid-template-columns: minmax(0, 1fr); }
+  .w-grid { grid-template-columns: minmax(0, 1fr); }
+  .top .actions { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } button.tile:hover { transform: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 26 26" aria-hidden="true"><rect x="2" y="2" width="9" height="9" rx="2.5" fill="var(--accent)"/><rect x="15" y="2" width="9" height="9" rx="2.5" fill="none" stroke="var(--muted)" stroke-width="1.8"/><rect x="2" y="15" width="9" height="9" rx="2.5" fill="none" stroke="var(--muted)" stroke-width="1.8" stroke-dasharray="3 2"/><rect x="15" y="15" width="9" height="9" rx="2.5" fill="none" stroke="var(--muted)" stroke-width="1.8"/></svg>
+    Territory Desk <small>Franchise partner decisions</small>
+  </div>
+  <div class="actions">
+    <button class="btn" data-act="sample">Load sample data</button>
+    <label class="btn primary">Upload workbook<input type="file" id="file" accept=".xlsx,.xls" hidden></label>
+  </div>
+</header>
+<div id="err" role="alert" hidden></div>
+<main id="app"></main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+/* engine.js */
+(function (root) {
+'use strict';
+
+/* ------------------------------------------------------------------ */
+/* Fixed reference data (from the brief)                               */
+/* ------------------------------------------------------------------ */
+var CITIES = {
+  'Bengaluru':        { prefix: '560', tier: 'Tier 1' },
+  'Mysuru':           { prefix: '570', tier: 'Tier 2' },
+  'Mangaluru':        { prefix: '575', tier: 'Tier 2' },
+  'Hubballi-Dharwad': { prefix: '580', tier: 'Tier 2' },
+  'Belagavi':         { prefix: '590', tier: 'Tier 2' },
+  'Tumakuru':         { prefix: '572', tier: 'Tier 3' },
+  'Davanagere':       { prefix: '577', tier: 'Tier 3' }
+};
+var ALIASES = {
+  'bangalore': 'Bengaluru', 'bengaluru': 'Bengaluru', 'bengalore': 'Bengaluru',
+  'mysore': 'Mysuru', 'mysuru': 'Mysuru',
+  'mangalore': 'Mangaluru', 'mangaluru': 'Mangaluru',
+  'hubli': 'Hubballi-Dharwad', 'hubballi': 'Hubballi-Dharwad', 'dharwad': 'Hubballi-Dharwad',
+  'hubballidharwad': 'Hubballi-Dharwad', 'hublidharwad': 'Hubballi-Dharwad',
+  'belgaum': 'Belagavi', 'belagavi': 'Belagavi',
+  'tumkur': 'Tumakuru', 'tumakuru': 'Tumakuru',
+  'davangere': 'Davanagere', 'davanagere': 'Davanagere'
+};
+var STORES = [
+  { id: 'ST-01', city: 'Bengaluru', pin: '560001', year: 2019 },
+  { id: 'ST-02', city: 'Bengaluru', pin: '560034', year: 2020 },
+  { id: 'ST-03', city: 'Bengaluru', pin: '560038', year: 2021 },
+  { id: 'ST-04', city: 'Bengaluru', pin: '560066', year: 2022 },
+  { id: 'ST-05', city: 'Bengaluru', pin: '560076', year: 2023 },
+  { id: 'ST-06', city: 'Mysuru', pin: '570009', year: 2021 },
+  { id: 'ST-07', city: 'Mysuru', pin: '570017', year: 2024 },
+  { id: 'ST-08', city: 'Mangaluru', pin: '575001', year: 2022 },
+  { id: 'ST-09', city: 'Hubballi-Dharwad', pin: '580020', year: 2023 },
+  { id: 'ST-10', city: 'Belagavi', pin: '590001', year: 2024 }
+];
+// Cities with no store yet learn the trade at the nearest city that has one
+var NEAREST_CITY = { 'Tumakuru': 'Bengaluru', 'Davanagere': 'Hubballi-Dharwad' };
+
+/* ------------------------------------------------------------------ */
+/* Assumptions (every one of these is editable in the UI)              */
+/* ------------------------------------------------------------------ */
+var DEFAULT_CFG = {
+  floors: { 'Tier 1': 30, 'Tier 2': 25, 'Tier 3': 20 },  // minimum investment, Rs lakh
+  rejectRatio: 0.7,        // below 70% of the floor: not salvageable, reject
+  minSpace: 250,           // sq ft hard minimum
+  idealMin: 300, idealMax: 500,
+  earliestWeeks: 10,       // agreement -> fit-out -> training -> opening
+  noSpaceExtraWeeks: 6,    // extra time if the partner has no space yet
+  cannibNear: 5,           // pin numbers apart: treated as adjacent to an existing store
+  cannibMid: 25,
+  firstTimerYears: 1,
+  weights: { capital: 25, experience: 20, space: 25, timeline: 10, cannibal: 10, data: 10 }
+};
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+function num(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return isNaN(v) ? null : v;
+  var m = String(v).replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+  return m ? parseFloat(m[0]) : null;
+}
+function normHeader(s) { return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function canonCity(v) {
+  var s = String(v == null ? '' : v).trim();
+  if (CITIES[s]) return s;
+  var k = s.toLowerCase().replace(/[^a-z]/g, '');
+  return ALIASES[k] || s;
+}
+function r1(x) { return Math.round(x * 10) / 10; }
+function pad(n, w) { n = String(n); while (n.length < w) n = '0' + n; return n; }
+
+/* ------------------------------------------------------------------ */
+/* Reading the uploaded sheets (arrays of arrays in, records out)      */
+/* ------------------------------------------------------------------ */
+function findHeaderRow(aoa, firstKey) {
+  for (var i = 0; i < Math.min(aoa.length, 15); i++) {
+    var row = aoa[i] || [];
+    for (var j = 0; j < row.length; j++) {
+      if (normHeader(row[j]).indexOf(firstKey) === 0) return i;
+    }
+  }
+  return -1;
+}
+function colFinder(headers) {
+  var H = headers.map(normHeader);
+  return function () {
+    for (var a = 0; a < arguments.length; a++) {
+      for (var i = 0; i < H.length; i++) if (H[i].indexOf(arguments[a]) === 0) return i;
+    }
+    return -1;
+  };
+}
+function cell(row, i) { return i < 0 || i >= row.length || row[i] === undefined || row[i] === null ? '' : row[i]; }
+function rowBlank(row) { return !row || row.every(function (c) { return String(c == null ? '' : c).trim() === ''; }); }
+
+function normSpace(v) {
+  var s = String(v == null ? '' : v).toLowerCase();
+  if (/\bown/.test(s)) return 'Owned';
+  if (/rent|lease/.test(s)) return 'Rented';
+  return 'Not yet identified';
+}
+function normFloor(v) {
+  var s = String(v == null ? '' : v).toLowerCase();
+  if (/ground/.test(s)) return 'Ground';
+  if (/mall/.test(s)) return 'Mall unit';
+  if (/upper|first|1st|second|2nd|third|above|terrace/.test(s)) return 'Upper';
+  return 'Not known';
+}
+function normLang(v) {
+  var s = String(v == null ? '' : v).toLowerCase();
+  if (/kann/.test(s)) return 'Kannada';
+  if (/hin/.test(s)) return 'Hindi';
+  if (/eng/.test(s)) return 'English';
+  return '';
+}
+function normTier(v, city) {
+  var m = String(v == null ? '' : v).match(/[123]/);
+  if (m) return 'Tier ' + m[0];
+  return CITIES[city] ? CITIES[city].tier : 'Tier 2';
+}
+function normPriority(v) {
+  var s = String(v == null ? '' : v).toLowerCase();
+  if (/high/.test(s)) return 'High';
+  if (/low/.test(s)) return 'Low';
+  return 'Medium';
+}
+
+function parseApplications(aoa) {
+  var hi = findHeaderRow(aoa, 'applicationid');
+  if (hi < 0) throw new Error('Could not find an "Application ID" header row in the Applications sheet.');
+  var ci = colFinder(aoa[hi]);
+  var C = {
+    id: ci('applicationid', 'appid'), name: ci('applicantname', 'name'), city: ci('city'), state: ci('state'),
+    pin: ci('pincode', 'pin'), invest: ci('investment'), exp: ci('retailexperience', 'experience'),
+    biz: ci('currentpastbusiness', 'currentbusiness', 'business'), space: ci('spaceavailable'),
+    size: ci('spacesize'), floor: ci('floor'), launch: ci('targetlaunch', 'launch'),
+    lang: ci('preferredlanguage', 'language'), notes: ci('notes')
+  };
+  var out = [], seen = {};
+  for (var r = hi + 1; r < aoa.length; r++) {
+    var row = aoa[r];
+    if (rowBlank(row)) continue;
+    var idRaw = String(cell(row, C.id)).trim().toUpperCase();
+    var name = String(cell(row, C.name)).trim();
+    if (!idRaw && !name) continue;
+    var id = idRaw || ('ROW-' + (r + 1));
+    if (seen[id]) { seen[id]++; id = id + '#' + seen[id]; } else seen[id] = 1;
+    var city = canonCity(cell(row, C.city));
+    var pinRaw = String(cell(row, C.pin)).trim();
+    var pin = pinRaw.replace(/\.0$/, '').replace(/\s/g, '');
+    var spaceRaw = String(cell(row, C.space)).trim();
+    var a = {
+      id: id, row: r + 1, name: name || id, city: city, state: String(cell(row, C.state)).trim(),
+      pin: pin, pinRaw: pinRaw, invest: num(cell(row, C.invest)), exp: num(cell(row, C.exp)),
+      biz: String(cell(row, C.biz)).trim(), space: normSpace(spaceRaw), spaceRaw: spaceRaw,
+      size: num(cell(row, C.size)), floor: normFloor(cell(row, C.floor)),
+      launch: num(cell(row, C.launch)), lang: normLang(cell(row, C.lang)),
+      langRaw: String(cell(row, C.lang)).trim(), notes: String(cell(row, C.notes)).trim(),
+      sizeAssumed: false, withdrawn: false
+    };
+    a.templateExample = (id === 'APP-001' && /ravi kumar/i.test(name) && pin === '570001' && /diwali/i.test(a.notes));
+    out.push(a);
+  }
+  return out;
+}
+
+function parseTerritories(aoa) {
+  var hi = findHeaderRow(aoa, 'territoryid');
+  if (hi < 0) throw new Error('Could not find a "Territory ID" header row in the Territories sheet.');
+  var ci = colFinder(aoa[hi]);
+  var C = { id: ci('territoryid'), city: ci('city'), state: ci('state'), pins: ci('pincodes', 'pincode', 'pin'),
+            tier: ci('citytier', 'tier'), slots: ci('openslots', 'slots'), priority: ci('priority') };
+  var out = [];
+  for (var r = hi + 1; r < aoa.length; r++) {
+    var row = aoa[r];
+    if (rowBlank(row)) continue;
+    var id = String(cell(row, C.id)).trim().toUpperCase();
+    if (!id) continue;
+    var city = canonCity(cell(row, C.city));
+    var pins = (String(cell(row, C.pins)).match(/\d{6}/g) || []);
+    var seen = {}; pins = pins.filter(function (p) { if (seen[p]) return false; seen[p] = 1; return true; });
+    var t = {
+      id: id, row: r + 1, city: city, state: String(cell(row, C.state)).trim(), pins: pins,
+      tier: normTier(cell(row, C.tier), city), slots: Math.max(0, num(cell(row, C.slots)) || 0),
+      priority: normPriority(cell(row, C.priority))
+    };
+    t.templateExample = (id === 'TER-01' && pins.join(',') === '570001,570002,570008' && t.slots === 3 && t.priority === 'High');
+    out.push(t);
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Evaluation of a single applicant                                    */
+/* ------------------------------------------------------------------ */
+var RETAIL_RX = /(shop|store|retail|showroom|outlet|kirana|supermarket|\bmart\b|trading|trader|wholesale|garment|footwear|mobile|electronics|optical|eyewear|jewel|pharmacy|medical|stationery|boutique|sales|merchant|dealer|franchise|general store|provision)/i;
+
+function buildContext(territories, stores, cfg, apps) {
+  var pinToTer = {}, dupPins = [];
+  territories.forEach(function (t) {
+    t.pins.forEach(function (p) { if (pinToTer[p]) { if (dupPins.indexOf(p) < 0) dupPins.push(p); } else pinToTer[p] = t; });
+  });
+  var storeByPin = {}; stores.forEach(function (s) { storeByPin[s.pin] = s; });
+  var cityHasTer = {}; territories.forEach(function (t) { cityHasTer[t.city] = true; });
+  var nameCount = {};
+  (apps || []).forEach(function (a) { if (a.withdrawn) return; var k = a.name.trim().toLowerCase(); nameCount[k] = (nameCount[k] || 0) + 1; });
+  return { territories: territories, stores: stores, cfg: cfg, pinToTer: pinToTer, storeByPin: storeByPin,
+           cityHasTer: cityHasTer, dupPins: dupPins, nameCount: nameCount };
+}
+
+function feasibleMonths(a, cfg) {
+  var weeks = cfg.earliestWeeks + (a.space === 'Not yet identified' ? cfg.noSpaceExtraWeeks : 0);
+  return weeks / 4.345;
+}
+
+function nearestStoreInfo(a, ctx) {
+  var n = parseInt(a.pin, 10); if (isNaN(n)) return null;
+  var best = null;
+  ctx.stores.forEach(function (s) {
+    if (s.city !== a.city) return;
+    var d = Math.abs(parseInt(s.pin, 10) - n);
+    if (!best || d < best.d) best = { store: s, d: d };
+  });
+  return best;
+}
+
+function evaluateApp(a, ctx) {
+  var cfg = ctx.cfg, W = cfg.weights, issues = [];
+  function add(code, level, title, detail, extra) {
+    var it = { code: code, level: level, title: title, detail: detail };
+    if (extra) for (var k in extra) it[k] = extra[k];
+    issues.push(it);
+  }
+  var city = CITIES[a.city];
+  var pin = a.pin;
+  var validPin = /^\d{6}$/.test(pin || '');
+  var ter = validPin ? (ctx.pinToTer[pin] || null) : null;
+  var tier = ter ? ter.tier : (city ? city.tier : null);
+  var floor = tier ? cfg.floors[tier] : null;
+
+  /* ---- pin and territory ---- */
+  if (!city) {
+    add('CITY_UNKNOWN', 'hold', 'City not recognised', '“' + a.city + '” is not one of the cities the brand serves.');
+  }
+  if (!validPin) {
+    add('PIN_BAD', 'hold', 'Invalid pin code', 'Pin code “' + a.pinRaw + '” is not a 6-digit number.');
+  } else if (city && pin.indexOf(city.prefix) !== 0) {
+    add('PIN_MISMATCH', 'hold', 'Pin code and city do not match',
+        pin + ' does not start with ' + city.prefix + ', the prefix for ' + a.city + '. One of the two is wrong.');
+  } else {
+    var st = ctx.storeByPin[pin];
+    if (st) {
+      add('PIN_HAS_STORE', 'hold', 'A store is already open in this pin code',
+          st.id + ' (opened ' + st.year + ') already operates in ' + pin + '. The brand never opens two stores in one pin code.', { store: st });
+    } else if (!ter) {
+      if (!ctx.cityHasTer[a.city]) {
+        add('NO_TERRITORY', 'reject', 'No expansion territory in this city',
+            'The brand has no open territory in ' + a.city + ' right now.');
+      } else {
+        add('PIN_OUTSIDE', 'hold', 'Pin code is outside the expansion territories',
+            pin + ' is not covered by any territory the brand wants to grow in within ' + a.city + '.');
+      }
+    }
+  }
+
+  /* ---- investment ---- */
+  var ratio = null;
+  if (a.invest === null || a.invest <= 0) {
+    add('INVEST_MISSING', 'hold', 'Investment amount missing', 'No usable investment figure was given.');
+  } else if (floor) {
+    ratio = a.invest / floor;
+    if (ratio < cfg.rejectRatio) {
+      add('INVEST_LOW', 'reject', 'Investment far below what a store here needs',
+          'Rs ' + a.invest + ' lakh is ' + Math.round(ratio * 100) + '% of the Rs ' + floor + ' lakh floor for a ' + tier + ' city (cut-off ' + Math.round(cfg.rejectRatio * 100) + '%).', { need: floor });
+    } else if (ratio < 1) {
+      add('INVEST_GAP', 'hold', 'Investment slightly below the floor',
+          'Rs ' + a.invest + ' lakh against a Rs ' + floor + ' lakh floor for a ' + tier + ' city. A co-investor or proof of extra funds would close the gap.', { need: floor });
+    }
+  }
+
+  /* ---- space ---- */
+  var hasSpace = a.space === 'Owned' || a.space === 'Rented';
+  if (!hasSpace) {
+    add('NO_SPACE', 'hold', 'No shop space identified yet', 'The applicant has not yet found a space, so the store cannot be fitted out.');
+  } else {
+    if (a.size === null && !a.sizeAssumed) add('SIZE_MISSING', 'hold', 'Space size missing', 'A ' + a.space.toLowerCase() + ' space is stated but no size was given.');
+    else if (a.size !== null && a.size < cfg.minSpace) add('SIZE_SMALL', 'hold', 'Space too small',
+        a.size + ' sq ft is under the ' + cfg.minSpace + ' sq ft minimum for the store format.');
+    if (a.floor === 'Upper') add('FLOOR_UPPER', 'hold', 'Upper-floor space', 'Upper floors get too little walk-in footfall; ground floor or a mall unit is needed.');
+  }
+
+  /* ---- contradictions between the form and the free-text notes ---- */
+  var notesAll = (a.notes || '').toLowerCase();
+  var notes = a.notesSuperseded ? '' : notesAll;   // once Ops records new information, old free-text no longer counts
+  var claimsSpace = /\b(already|have|has|got|own|owns|owned|secured|signed|finalised|finalized)\b[^.]{0,40}\b(shop|space|premises|property|unit|showroom)\b/.test(notes) || /lease (is )?signed|rent agreement|agreement signed/.test(notes);
+  var deniesSpace = /\b(no shop|no space|not yet|yet to|haven't found|havent found|don't have|dont have|looking for|searching for|will (rent|find|take|identify|look)|once approved|after approval)\b/.test(notes);
+  if (a.space === 'Not yet identified' && claimsSpace && !deniesSpace) {
+    add('NOTES_CONFLICT', 'hold', 'Notes contradict the form',
+        'The form says no space has been identified, but the notes say the applicant already has one. Which is right needs confirming.');
+  } else if (hasSpace && deniesSpace && !claimsSpace) {
+    add('NOTES_CONFLICT', 'hold', 'Notes contradict the form',
+        'The form says a space is ' + a.space.toLowerCase() + ', but the notes say the applicant is still looking.');
+  } else if (a.floor === 'Upper' && /ground[\s-]?floor/.test(notes) && !/looking|searching|prefer|want|need/.test(notes)) {
+    add('NOTES_CONFLICT', 'hold', 'Notes contradict the form', 'The form says upper floor, but the notes mention a ground-floor shop.');
+  }
+
+  /* ---- soft flags: do not block, but lower confidence ---- */
+  if (a.exp === 0 && /\b(run|runs|running|owner|owns|own|manage|manages|managing|operate|operates)\b[^.]{0,30}\b(shop|store|retail|showroom|outlet)/i.test(a.biz)) {
+    add('EXP_CONFLICT', 'soft', 'Experience looks understated', 'Retail experience is 0 years but the business description says the applicant runs a shop.');
+  } else if (a.exp !== null && a.exp >= 5 && /student|fresher|homemaker|unemployed/i.test(a.biz)) {
+    add('EXP_CONFLICT', 'soft', 'Experience looks overstated', a.exp + ' years of retail experience but the business description says "' + a.biz + '".');
+  }
+  if (/\b(loan|bank|finance|mudra|borrow|subsidy|sanction)/.test(notesAll)) {
+    add('LOAN', 'soft', 'Funding depends on a loan', 'The notes suggest part of the investment depends on a loan that may not be sanctioned yet.');
+  }
+  var nk = a.name.trim().toLowerCase();
+  if (ctx.nameCount[nk] > 1) add('DUP_APPLICANT', 'soft', 'Same name on several applications', 'Another application carries the same applicant name; possible duplicate.');
+  var fm = feasibleMonths(a, cfg);
+  if (a.launch !== null && a.launch < fm - 0.01) {
+    add('LAUNCH_SOON', 'info', 'Target launch is earlier than realistic',
+        'Target is ' + a.launch + ' month(s); the earliest realistic opening is about ' + fm.toFixed(1) + ' months.');
+  }
+  if (!a.lang) add('LANG_MISSING', 'info', 'Training language missing', 'Defaulting to English until the applicant confirms.');
+
+  /* ---- level ---- */
+  var level = 'ready';
+  if (issues.some(function (i) { return i.level === 'hold'; })) level = 'hold';
+  if (issues.some(function (i) { return i.level === 'reject'; })) level = 'reject';
+
+  /* ---- score (0-100) ---- */
+  var parts = {}, softCount = issues.filter(function (i) { return i.level === 'soft'; }).length;
+  var capF = 0, capNote = 'no figure';
+  if (ratio !== null) {
+    capF = ratio >= 1 ? 0.4 + 0.6 * clamp((ratio - 1) / 0.5, 0, 1) : 0.4 * clamp((ratio - cfg.rejectRatio) / (1 - cfg.rejectRatio), 0, 1);
+    capNote = 'Rs ' + a.invest + ' lakh vs Rs ' + floor + ' lakh floor (' + Math.round(ratio * 100) + '%)';
+  }
+  parts.capital = { pts: W.capital * capF, max: W.capital, label: 'Capital', note: capNote };
+
+  var yrs = a.exp === null ? 0 : a.exp;
+  var retailBiz = RETAIL_RX.test(a.biz || '');
+  var expF = (0.2 + 0.8 * Math.min(yrs, 5) / 5) * (retailBiz ? 1 : 0.85);
+  parts.experience = { pts: W.experience * expF, max: W.experience, label: 'Experience',
+    note: yrs + ' yr' + (yrs === 1 ? '' : 's') + (retailBiz ? ', retail background' : ', non-retail background') };
+
+  var spF = 0, spNote = 'no space';
+  if (hasSpace) {
+    var ownF = a.space === 'Owned' ? 1 : 0.85;
+    var sz = a.size, szF;
+    if (sz === null) szF = 0.7;
+    else if (sz >= cfg.idealMin && sz <= cfg.idealMax) szF = 1;
+    else if (sz > cfg.idealMax) szF = 0.9;
+    else szF = 0.7;
+    var flF = a.floor === 'Ground' ? 1 : a.floor === 'Mall unit' ? 0.9 : a.floor === 'Upper' ? 0.5 : 0.6;
+    spF = ownF * szF * flF;
+    spNote = a.space + ', ' + (sz === null ? 'size to confirm' : sz + ' sq ft') + ', ' + (a.floor === 'Not known' ? 'floor to confirm' : a.floor.toLowerCase());
+  }
+  parts.space = { pts: W.space * spF, max: W.space, label: 'Space', note: spNote };
+
+  var tF = 0.6, tNote = 'no target given';
+  if (a.launch !== null) {
+    tF = a.launch >= fm ? 1 : Math.max(0, 1 - (fm - a.launch) / fm);
+    tNote = 'target ' + a.launch + ' mo vs earliest ' + fm.toFixed(1) + ' mo';
+  }
+  parts.timeline = { pts: W.timeline * tF, max: W.timeline, label: 'Timeline', note: tNote };
+
+  var ns = nearestStoreInfo(a, ctx), cF = 1, cNote = 'no store in this city yet', risk = 'Low';
+  if (ns) {
+    if (ns.d === 0) { cF = 0; risk = 'Blocked'; }
+    else if (ns.d <= cfg.cannibNear) { cF = 0; risk = 'High'; }
+    else if (ns.d <= cfg.cannibMid) { cF = 0.5; risk = 'Medium'; }
+    cNote = 'nearest store ' + ns.store.id + ' is ' + ns.d + ' pin numbers away';
+  }
+  parts.cannibal = { pts: W.cannibal * cF, max: W.cannibal, label: 'Spacing', note: cNote, risk: risk };
+
+  var dF = clamp(1 - 0.25 * softCount, 0, 1);
+  parts.data = { pts: W.data * dF, max: W.data, label: 'Data confidence', note: softCount ? softCount + ' soft flag' + (softCount > 1 ? 's' : '') : 'clean' };
+
+  var score = 0; for (var k in parts) score += parts[k].pts;
+
+  /* ---- conditions attached to an approval ---- */
+  var cond = [];
+  if (a.sizeAssumed) cond.push('Confirm the space is at least ' + cfg.minSpace + ' sq ft before the agreement is signed');
+  if (hasSpace && a.floor === 'Not known') cond.push('Confirm the floor (ground floor or mall unit)');
+  if (issues.some(function (i) { return i.code === 'LOAN'; })) cond.push('Show the loan sanction letter as proof of funds');
+  if (issues.some(function (i) { return i.code === 'EXP_CONFLICT'; })) cond.push('Verify past retail experience during KYC');
+  if (issues.some(function (i) { return i.code === 'DUP_APPLICANT'; })) cond.push('Confirm this is the only application from this person');
+  if (a.space === 'Rented') cond.push('Registered lease for the space');
+
+  return { level: level, issues: issues, tier: tier, ter: ter, floor: floor, ratio: ratio, parts: parts, score: r1(score), conditions: cond, feasible: fm };
+}
+
+/* ------------------------------------------------------------------ */
+/* Allocation: one store per pin, slots per territory                  */
+/* ------------------------------------------------------------------ */
+function cmp(A, B) {
+  return (B.ev.score - A.ev.score) || ((B.a.exp || 0) - (A.a.exp || 0)) || ((B.a.invest || 0) - (A.a.invest || 0)) || (A.a.id < B.a.id ? -1 : 1);
+}
+
+function core(apps, territories, stores, cfg) {
+  var live = apps.filter(function (a) { return !a.withdrawn; });
+  var ctx = buildContext(territories, stores, cfg, live);
+  var evals = {}, res = {};
+  live.forEach(function (a) { evals[a.id] = evaluateApp(a, ctx); });
+
+  var ready = live.filter(function (a) { return evals[a.id].level === 'ready'; }).map(function (a) { return { a: a, ev: evals[a.id] }; });
+  var byPin = {};
+  ready.forEach(function (x) { (byPin[x.a.pin] = byPin[x.a.pin] || []).push(x); });
+  var pinWinners = [];
+  Object.keys(byPin).forEach(function (pin) {
+    var g = byPin[pin].sort(cmp);
+    g.forEach(function (x, i) {
+      x.rankPin = i + 1; x.pinN = g.length; x.pinGroup = g;
+    });
+    pinWinners.push(g[0]);
+  });
+  var byTer = {};
+  pinWinners.forEach(function (x) { (byTer[x.ev.ter.id] = byTer[x.ev.ter.id] || []).push(x); });
+  var outcome = {};
+  Object.keys(byTer).forEach(function (tid) {
+    var g = byTer[tid].sort(cmp), t = g[0].ev.ter;
+    g.forEach(function (x, i) {
+      x.rankTer = i + 1; x.terN = g.length;
+      if (i < t.slots) outcome[x.a.id] = { o: 'Approve', winner: true };
+      else outcome[x.a.id] = { o: 'Waitlist', reason: 'territory_full' };
+    });
+    g._slots = t.slots;
+    byTer[tid] = g;
+  });
+  ready.forEach(function (x) {
+    if (x.rankPin > 1) outcome[x.a.id] = { o: 'Waitlist', reason: 'pin_lost', winner: x.pinGroup[0].a.id };
+  });
+
+  var approvedByTer = {};
+  Object.keys(outcome).forEach(function (id) { if (outcome[id].o === 'Approve') { var tid = evals[id].ter.id; approvedByTer[tid] = (approvedByTer[tid] || 0) + 1; } });
+  var approvedPins = {};
+  live.forEach(function (a) { if (outcome[a.id] && outcome[a.id].o === 'Approve') approvedPins[a.pin] = a.id; });
+
+  live.forEach(function (a) {
+    var ev = evals[a.id], oc = outcome[a.id];
+    var r = { id: a.id, score: ev.score, parts: ev.parts, issues: ev.issues, tier: ev.tier, ter: ev.ter, conditions: ev.conditions, feasible: ev.feasible };
+    if (ev.level === 'reject') r.outcome = 'Reject';
+    else if (ev.level === 'hold') r.outcome = 'Hold';
+    else r.outcome = oc.o;
+    if (r.outcome === 'Approve' || r.outcome === 'Waitlist') {
+      var x = ready.filter(function (y) { return y.a.id === a.id; })[0];
+      r.rankPin = x.rankPin; r.pinN = x.pinN; r.rankTer = x.rankTer || null; r.terN = x.terN || null;
+      r.pinRivals = x.pinGroup.filter(function (y) { return y.a.id !== a.id; }).map(function (y) { return y.a.id; });
+      if (oc.reason) { r.waitReason = oc.reason; r.winner = oc.winner || null; }
+      if (r.outcome === 'Approve') {
+        var next = null;
+        if (x.pinGroup.length > 1) next = x.pinGroup[1];
+        else {
+          var g = byTer[ev.ter.id], t = ev.ter;
+          if (g.length > t.slots) next = g[t.slots];
+        }
+        if (next) { r.nextRival = next.a.id; r.margin = r1(ev.score - next.ev.score); }
+      } else if (oc.reason === 'territory_full') {
+        var gg = byTer[ev.ter.id]; r.beatenBy = gg.slice(0, ev.ter.slots).map(function (y) { return y.a.id; });
+        r.margin = r1(gg[ev.ter.slots - 1] ? gg[ev.ter.slots - 1].ev.score - ev.score : 0);
+      } else {
+        var w = x.pinGroup[0]; r.margin = r1(w.ev.score - ev.score);
+      }
+    }
+    res[a.id] = r;
+  });
+  return { ctx: ctx, evals: evals, res: res, ready: ready, byTer: byTer, approvedByTer: approvedByTer, approvedPins: approvedPins, live: live };
+}
+
+function freePins(core0, city, exceptApp) {
+  var out = [];
+  core0.ctx.territories.forEach(function (t) {
+    if (t.city !== city) return;
+    var left = t.slots - (core0.approvedByTer[t.id] || 0);
+    if (left <= 0) return;
+    t.pins.forEach(function (p) {
+      if (core0.ctx.storeByPin[p]) return;
+      if (core0.approvedPins[p]) return;
+      var contested = core0.ready.some(function (x) { return x.a.pin === p && (!exceptApp || x.a.id !== exceptApp); });
+      out.push({ pin: p, ter: t.id, priority: t.priority, contested: contested, left: left });
+    });
+  });
+  var pr = { High: 0, Medium: 1, Low: 2 };
+  out.sort(function (a, b) { return (a.contested - b.contested) || (pr[a.priority] - pr[b.priority]) || (a.pin < b.pin ? -1 : 1); });
+  return out;
+}
+
+function simulateFixed(a, core0, apps, territories, stores, cfg) {
+  var ev = core0.evals[a.id], b = clone(a), fixes = [], possible = true, why = '';
+  var fp = freePins(core0, a.city, a.id);
+  ev.issues.forEach(function (i) {
+    switch (i.code) {
+      case 'PIN_HAS_STORE': case 'PIN_OUTSIDE':
+        if (fp.length) { b.pin = fp[0].pin; fixes.push('Take free pin ' + fp[0].pin + ' in ' + fp[0].ter); } else { possible = false; why = 'no_free_pin'; }
+        break;
+      case 'PIN_MISMATCH': case 'PIN_BAD': case 'CITY_UNKNOWN': possible = false; why = 'pin_unknown'; break;
+      case 'NO_SPACE': b.space = 'Rented'; b.size = cfg.idealMin; b.floor = 'Ground'; b.sizeAssumed = false; b.notesSuperseded = true; fixes.push('Find a rented ground-floor space of about ' + cfg.idealMin + ' sq ft'); break;
+      case 'SIZE_MISSING': b.size = cfg.idealMin; fixes.push('Confirm a space of at least ' + cfg.idealMin + ' sq ft'); break;
+      case 'SIZE_SMALL': b.size = cfg.idealMin; fixes.push('Move to a space of at least ' + cfg.idealMin + ' sq ft'); break;
+      case 'FLOOR_UPPER': b.floor = 'Ground'; fixes.push('Move to a ground-floor or mall space'); break;
+      case 'INVEST_GAP': case 'INVEST_MISSING': b.invest = i.need || ev.floor; fixes.push('Show Rs ' + (i.need || ev.floor) + ' lakh of investable funds'); break;
+      case 'NOTES_CONFLICT': b.notesSuperseded = true; fixes.push('Clear up the contradiction between notes and form'); break;
+    }
+  });
+  if (!possible || ev.issues.some(function (i) { return i.level === 'reject'; })) return { possible: false, why: why, fixes: fixes };
+  var apps2 = apps.map(function (x) { return x.id === a.id ? b : x; });
+  var c2 = core(apps2, territories, stores, cfg), r2 = c2.res[a.id];
+  return { possible: true, fixes: fixes, outcome: r2.outcome, rankPin: r2.rankPin, pinN: r2.pinN, score: r2.score, pin: b.pin,
+           terId: r2.ter ? r2.ter.id : null, winner: r2.winner || null, beatenBy: r2.beatenBy || null, stillHold: r2.outcome === 'Hold' };
+}
+
+function run(apps, territories, stores, cfg) {
+  var c = core(apps, territories, stores, cfg);
+  Object.keys(c.res).forEach(function (id) {
+    var r = c.res[id], a = apps.filter(function (x) { return x.id === id; })[0];
+    if (r.outcome === 'Hold') {
+      r.ifFixed = simulateFixed(a, c, apps, territories, stores, cfg);
+      var pinIssue = r.issues.filter(function (i) { return i.code === 'PIN_HAS_STORE' || i.code === 'PIN_OUTSIDE'; })[0];
+      if (pinIssue) r.alternatives = freePins(c, a.city, a.id).slice(0, 4);
+    } else if (r.outcome === 'Waitlist') {
+      r.alternatives = freePins(c, a.city, a.id).filter(function (p) { return p.pin !== a.pin; }).slice(0, 3);
+    }
+  });
+  c.cfg = cfg;
+  return c;
+}
+
+/* ------------------------------------------------------------------ */
+/* Plain-language explanation of a decision                            */
+/* ------------------------------------------------------------------ */
+function strengths(r) {
+  var arr = Object.keys(r.parts).map(function (k) { return { k: k, f: r.parts[k].max ? r.parts[k].pts / r.parts[k].max : 0, p: r.parts[k] }; });
+  arr.sort(function (a, b) { return b.f - a.f; });
+  return arr;
+}
+
+function explain(r, a, state) {
+  var cfg = state.cfg, out = { headline: '', lines: [], next: [] };
+  var t = r.ter;
+  if (r.outcome === 'Approve') {
+    out.headline = 'Approved for pin ' + a.pin + (t ? ' in ' + t.id + ' (' + a.city + ', ' + t.tier + ', ' + t.priority + ' priority)' : '');
+    var st = strengths(r).slice(0, 2).map(function (s) { return s.p.label.toLowerCase() + ' (' + s.p.note + ')'; });
+    out.lines.push('Score ' + r.score + ' out of 100. Strongest points: ' + st.join('; ') + '.');
+    if (r.pinN > 1) out.lines.push('Won pin ' + a.pin + ' against ' + r.pinRivals.join(', ') + (r.margin !== undefined ? ' by ' + r.margin + ' points.' : '.'));
+    if (r.terN) out.lines.push('Took one of ' + t.slots + ' open slot' + (t.slots === 1 ? '' : 's') + ' in ' + t.id + (r.nextRival ? '; the next in line is ' + r.nextRival + ' (' + r.margin + ' points behind).' : '.'));
+    if (r.conditions.length) out.lines.push('Conditions to clear: ' + r.conditions.join('; ') + '.');
+  } else if (r.outcome === 'Waitlist') {
+    out.headline = 'Eligible, but waitlisted';
+    if (r.waitReason === 'pin_lost') {
+      out.lines.push('Scores ' + r.score + ', but pin ' + a.pin + ' goes to ' + r.winner + ' (' + r.margin + ' points ahead). The brand opens one store per pin code.');
+      out.next.push('Moves up if ' + r.winner + ' drops out or fails verification.');
+    } else {
+      out.lines.push('Best applicant for pin ' + a.pin + ' (score ' + r.score + '), but ' + t.id + ' has only ' + t.slots + ' open slot' + (t.slots === 1 ? '' : 's') + ', taken by ' + (r.beatenBy || []).join(', ') + ' with higher scores' + (r.margin ? ' (' + r.margin + ' points ahead at the cut-off).' : '.'));
+      out.next.push('Promoted if a slot opens in ' + t.id + ' or one of those applicants drops out.');
+    }
+    if (r.alternatives && r.alternatives.length) out.next.push('Open alternative' + (r.alternatives.length > 1 ? 's' : '') + ' in ' + a.city + ': ' + r.alternatives.map(function (p) { return p.pin + ' (' + p.ter + ')'; }).join(', ') + ' (needs a space there).');
+  } else if (r.outcome === 'Hold') {
+    var holds = r.issues.filter(function (i) { return i.level === 'hold'; });
+    out.headline = 'On hold: ' + holds.map(function (i) { return i.title.toLowerCase(); }).join('; ');
+    holds.forEach(function (i) { out.lines.push(i.detail); });
+    if (r.ifFixed) {
+      var f = r.ifFixed;
+      if (!f.possible && f.why === 'no_free_pin') out.next.push('No open pin is left in ' + a.city + ': every slot in its territories is already taken, so a re-targeted application would join the waitlist.');
+      else if (!f.possible) out.next.push('Cannot be re-scored until the pin code or city is corrected.');
+      else {
+        out.next.push('To move forward: ' + f.fixes.join('; ') + '.');
+        if (f.outcome === 'Approve') out.next.push('If that happens, the application would be approved (score ' + f.score + (f.pinN > 1 ? ', ranked #' + f.rankPin + ' of ' + f.pinN + ' for pin ' + f.pin : '') + ').');
+        else if (f.outcome === 'Waitlist') out.next.push('If that happens, it would still be waitlisted (score ' + f.score + (f.winner ? ', behind ' + f.winner : f.beatenBy ? ', behind ' + f.beatenBy.join(', ') : '') + ').');
+        else out.next.push('Even then it would remain on hold for other reasons.');
+      }
+    }
+    if (r.alternatives && r.alternatives.length) out.next.push('Open pins in ' + a.city + ': ' + r.alternatives.map(function (p) { return p.pin + ' (' + p.ter + ')'; }).join(', ') + '.');
+  } else if (r.outcome === 'Reject') {
+    var rj = r.issues.filter(function (i) { return i.level === 'reject'; });
+    out.headline = 'Not taken forward: ' + rj.map(function (i) { return i.title.toLowerCase(); }).join('; ');
+    rj.forEach(function (i) { out.lines.push(i.detail); });
+    out.next.push('Keep on file and re-contact if the situation changes (for example, more capital or a new territory opening).');
+  }
+  r.issues.filter(function (i) { return i.level === 'soft' || i.level === 'info'; }).forEach(function (i) { out.lines.push('Note: ' + i.detail); });
+  if (r.outcome === 'Approve') {
+    out.short = 'Takes pin ' + a.pin + (t ? ' in ' + t.id : '') + (r.pinN > 1 ? ', ahead of ' + r.pinRivals.join(', ') + ' by ' + r.margin : r.nextRival ? ', ' + r.margin + ' ahead of ' + r.nextRival : '') + (r.conditions.length ? '; ' + r.conditions.length + ' condition' + (r.conditions.length > 1 ? 's' : '') : '');
+  } else if (r.outcome === 'Waitlist') {
+    out.short = r.waitReason === 'pin_lost' ? 'Pin ' + a.pin + ' goes to ' + r.winner + ' (' + r.margin + ' points ahead)' : t.id + ' is full; ' + r.margin + ' points under the cut-off';
+  } else out.short = out.headline;
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Onboarding plan for approved partners                               */
+/* ------------------------------------------------------------------ */
+function mentorStore(a, ctx) {
+  var ns = nearestStoreInfo(a, ctx);
+  if (ns) return ns.store;
+  var nc = NEAREST_CITY[a.city];
+  var s = ctx.stores.filter(function (x) { return x.city === nc; });
+  return s.length ? s[s.length - 1] : ctx.stores[0];
+}
+
+function onboardingPlan(r, a, state) {
+  var cfg = state.cfg, lang = a.lang || 'English';
+  var ctx = state.run.ctx;
+  var firstTimer = (a.exp || 0) < cfg.firstTimerYears;
+  var mentor = mentorStore(a, ctx);
+  var steps = [
+    { wk: 'Week 0-1', title: 'Verify and sign', detail: 'KYC, proof of funds (Rs ' + (r.ter ? cfg.floors[r.tier] : '') + ' lakh minimum) and space documents. Franchise agreement signed.' },
+    { wk: 'Week 1-2', title: 'Site validation', detail: 'Visit to the ' + (a.size ? a.size + ' sq ft ' : '') + (a.floor === 'Not known' ? '' : a.floor.toLowerCase() + ' ') + 'space; layout and signage approved.' },
+    { wk: 'Week 2-6', title: 'Fit-out and licences', detail: 'Fit-out by the brand vendor; shop and establishment licence and GST registration in parallel; first inventory ordered.' },
+    { wk: firstTimer ? 'Week 3-6' : 'Week 4-5', title: 'Training in ' + lang,
+      detail: (firstTimer ? 'Extended 3-week track for first-time retailers: product and sales basics, billing and inventory systems, then one week shadowing at ' + mentor.id + ' (' + mentor.city + ').'
+                          : 'Express 1-week track for experienced retailers: brand standards, billing and inventory systems, and a day at ' + mentor.id + ' (' + mentor.city + ').') +
+              ' All material and the trainer in ' + lang + '.' },
+    { wk: 'Week 7-8', title: 'Systems and dry run', detail: 'POS and stock system set up; mock sales day with the area manager.' },
+    { wk: 'Week ' + cfg.earliestWeeks, title: 'Opening and first 30 days', detail: 'Soft launch, then grand opening. Daily check-in for week 1, weekly review for the first month.' }
+  ];
+  var targetNote = '';
+  if (a.launch !== null) {
+    var fm = r.feasible;
+    targetNote = a.launch >= fm ? 'Target of ' + a.launch + ' month(s) is achievable.' : 'Target of ' + a.launch + ' month(s) is too tight; the realistic opening is about ' + fm.toFixed(1) + ' months from approval.';
+  }
+  return { track: firstTimer ? 'Extended (first-time retailer)' : 'Express (experienced)', language: lang, mentor: mentor, steps: steps, openWeeks: cfg.earliestWeeks, targetNote: targetNote, conditions: r.conditions };
+}
+
+/* ------------------------------------------------------------------ */
+/* Messages to applicants in their own language                        */
+/* ------------------------------------------------------------------ */
+var ASK = {
+  PIN_BAD: { en: 'a valid 6-digit pin code', hi: 'सही 6 अंकों का पिन कोड', kn: 'ಸರಿಯಾದ 6 ಅಂಕಿಯ ಪಿನ್ ಕೋಡ್' },
+  PIN_MISMATCH: { en: 'the correct pin code and city (the two do not match)', hi: 'सही पिन कोड और शहर (दोनों मेल नहीं खाते)', kn: 'ಸರಿಯಾದ ಪಿನ್ ಕೋಡ್ ಮತ್ತು ನಗರ (ಇವೆರಡೂ ಹೊಂದಿಕೆಯಾಗುತ್ತಿಲ್ಲ)' },
+  CITY_UNKNOWN: { en: 'your city', hi: 'आपका शहर', kn: 'ನಿಮ್ಮ ನಗರ' },
+  PIN_HAS_STORE: { en: 'a different pin code (we already have a store in this one)', hi: 'कोई दूसरा पिन कोड (इस पिन कोड में हमारा स्टोर पहले से है)', kn: 'ಬೇರೆ ಪಿನ್ ಕೋಡ್ (ಈ ಪಿನ್ ಕೋಡ್‌ನಲ್ಲಿ ನಮ್ಮ ಅಂಗಡಿ ಈಗಾಗಲೇ ಇದೆ)' },
+  PIN_OUTSIDE: { en: 'a pin code inside our current expansion areas', hi: 'हमारे वर्तमान विस्तार क्षेत्रों के भीतर का पिन कोड', kn: 'ನಮ್ಮ ಪ್ರಸ್ತುತ ವಿಸ್ತರಣಾ ಪ್ರದೇಶಗಳೊಳಗಿನ ಪಿನ್ ಕೋಡ್' },
+  NO_SPACE: { en: 'details of a shop space (ownership, size and floor)', hi: 'दुकान की जगह का विवरण (मालिकाना, आकार और मंज़िल)', kn: 'ಅಂಗಡಿ ಜಾಗದ ವಿವರಗಳು (ಮಾಲೀಕತ್ವ, ಗಾತ್ರ ಮತ್ತು ಮಹಡಿ)' },
+  SIZE_MISSING: { en: 'the size of your space in sq ft', hi: 'आपकी जगह का आकार (वर्ग फुट में)', kn: 'ನಿಮ್ಮ ಜಾಗದ ಗಾತ್ರ (ಚದರ ಅಡಿಗಳಲ್ಲಿ)' },
+  SIZE_SMALL: { en: 'a space of at least {min} sq ft', hi: 'कम से कम {min} वर्ग फुट की जगह', kn: 'ಕನಿಷ್ಠ {min} ಚದರ ಅಡಿಗಳ ಜಾಗ' },
+  FLOOR_UPPER: { en: 'a ground-floor or mall space (upper floors get too few customers)', hi: 'ग्राउंड फ्लोर या मॉल में जगह (ऊपरी मंज़िल पर ग्राहक कम आते हैं)', kn: 'ನೆಲ ಮಹಡಿ ಅಥವಾ ಮಾಲ್‌ನಲ್ಲಿ ಜಾಗ (ಮೇಲಿನ ಮಹಡಿಗಳಿಗೆ ಗ್ರಾಹಕರು ಕಡಿಮೆ ಬರುತ್ತಾರೆ)' },
+  INVEST_GAP: { en: 'proof of about Rs {need} lakh in total funds (or a co-investor)', hi: 'कुल लगभग ₹{need} लाख की राशि का प्रमाण (या सह-निवेशक)', kn: 'ಒಟ್ಟು ಸುಮಾರು ₹{need} ಲಕ್ಷ ಹಣದ ಪುರಾವೆ (ಅಥವಾ ಸಹ-ಹೂಡಿಕೆದಾರ)' },
+  INVEST_MISSING: { en: 'your investment amount', hi: 'आपकी निवेश राशि', kn: 'ನಿಮ್ಮ ಹೂಡಿಕೆ ಮೊತ್ತ' },
+  NOTES_CONFLICT: { en: 'a clarification: your notes and your form say different things about your space', hi: 'स्पष्टीकरण: आपके नोट्स और फ़ॉर्म में जगह के बारे में अलग-अलग जानकारी है', kn: 'ಸ್ಪಷ್ಟೀಕರಣ: ನಿಮ್ಮ ಟಿಪ್ಪಣಿ ಮತ್ತು ಫಾರ್ಮ್‌ನಲ್ಲಿ ಜಾಗದ ಬಗ್ಗೆ ಬೇರೆ ಬೇರೆ ಮಾಹಿತಿ ಇದೆ' }
+};
+var REJECT_WHY = {
+  INVEST_LOW: { en: 'the investment capacity is well below what a store in this city needs', hi: 'निवेश क्षमता इस शहर में स्टोर के लिए ज़रूरी राशि से काफ़ी कम है', kn: 'ಹೂಡಿಕೆ ಸಾಮರ್ಥ್ಯ ಈ ನಗರದಲ್ಲಿ ಅಂಗಡಿಗೆ ಬೇಕಾದ ಮೊತ್ತಕ್ಕಿಂತ ತುಂಬಾ ಕಡಿಮೆ ಇದೆ' },
+  NO_TERRITORY: { en: 'we are not opening new stores in this city right now', hi: 'हम फ़िलहाल इस शहर में नए स्टोर नहीं खोल रहे हैं', kn: 'ನಾವು ಸದ್ಯಕ್ಕೆ ಈ ನಗರದಲ್ಲಿ ಹೊಸ ಅಂಗಡಿಗಳನ್ನು ತೆರೆಯುತ್ತಿಲ್ಲ' }
+};
+var LANGKEY = { English: 'en', Hindi: 'hi', Kannada: 'kn' };
+
+function fill(s, m) { return s.replace(/\{(\w+)\}/g, function (_, k) { return m[k] !== undefined ? m[k] : ''; }); }
+
+function letter(r, a, lang, cfg) {
+  var L = LANGKEY[lang] || 'en';
+  var m = { name: a.name, id: a.id, pin: a.pin, city: a.city, min: cfg.minSpace };
+  var T = {
+    Approve: {
+      en: 'Dear {name}, congratulations! Your application {id} for a store in {city} (pin code {pin}) is approved. Next step: document verification and the franchise agreement. Your training will be in English. Our team will call you within 2 working days.',
+      hi: 'प्रिय {name}, बधाई हो! {city} (पिन कोड {pin}) में स्टोर के लिए आपका आवेदन {id} स्वीकृत हो गया है। अगला कदम: दस्तावेज़ों का सत्यापन और फ्रैंचाइज़ी एग्रीमेंट। आपकी ट्रेनिंग हिंदी में होगी। हमारी टीम 2 कार्य-दिवसों में आपको फ़ोन करेगी।',
+      kn: 'ಆತ್ಮೀಯ {name}, ಅಭಿನಂದನೆಗಳು! {city} (ಪಿನ್ ಕೋಡ್ {pin}) ನಲ್ಲಿ ಅಂಗಡಿ ತೆರೆಯಲು ನಿಮ್ಮ ಅರ್ಜಿ {id} ಅನುಮೋದನೆಯಾಗಿದೆ. ಮುಂದಿನ ಹಂತ: ದಾಖಲೆಗಳ ಪರಿಶೀಲನೆ ಮತ್ತು ಫ್ರಾಂಚೈಸಿ ಒಪ್ಪಂದ. ನಿಮ್ಮ ತರಬೇತಿ ಕನ್ನಡದಲ್ಲಿ ನಡೆಯುತ್ತದೆ. ನಮ್ಮ ತಂಡ 2 ಕೆಲಸದ ದಿನಗಳಲ್ಲಿ ನಿಮಗೆ ಕರೆ ಮಾಡುತ್ತದೆ.'
+    },
+    Waitlist: {
+      en: 'Dear {name}, your application {id} is eligible, but there is no open place for pin code {pin} at the moment. You are on our waiting list and we will contact you as soon as a place opens up.',
+      hi: 'प्रिय {name}, आपका आवेदन {id} योग्य है, लेकिन अभी पिन कोड {pin} के लिए जगह उपलब्ध नहीं है। आप हमारी प्रतीक्षा सूची में हैं और जगह खाली होते ही हम आपसे संपर्क करेंगे।',
+      kn: 'ಆತ್ಮೀಯ {name}, ನಿಮ್ಮ ಅರ್ಜಿ {id} ಅರ್ಹವಾಗಿದೆ, ಆದರೆ ಸದ್ಯಕ್ಕೆ ಪಿನ್ ಕೋಡ್ {pin} ಗೆ ಸ್ಥಾನ ಲಭ್ಯವಿಲ್ಲ. ನೀವು ನಮ್ಮ ಕಾಯುವ ಪಟ್ಟಿಯಲ್ಲಿದ್ದೀರಿ; ಸ್ಥಾನ ಖಾಲಿಯಾದ ತಕ್ಷಣ ನಾವು ನಿಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸುತ್ತೇವೆ.'
+    },
+    Hold: {
+      en: 'Dear {name}, thank you for applying ({id}). We cannot approve it yet. Please send us: {ask}. As soon as we have this, we will review your application again.',
+      hi: 'प्रिय {name}, आवेदन ({id}) के लिए धन्यवाद। हम इसे अभी स्वीकृत नहीं कर सकते। कृपया हमें भेजें: {ask}। यह मिलते ही हम आपके आवेदन की दोबारा समीक्षा करेंगे।',
+      kn: 'ಆತ್ಮೀಯ {name}, ಅರ್ಜಿ ({id}) ಸಲ್ಲಿಸಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದಗಳು. ನಾವು ಇದನ್ನು ಇನ್ನೂ ಅನುಮೋದಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ದಯವಿಟ್ಟು ನಮಗೆ ಕಳುಹಿಸಿ: {ask}. ಇದು ಸಿಕ್ಕ ತಕ್ಷಣ ನಾವು ನಿಮ್ಮ ಅರ್ಜಿಯನ್ನು ಮತ್ತೆ ಪರಿಶೀಲಿಸುತ್ತೇವೆ.'
+    },
+    Reject: {
+      en: 'Dear {name}, thank you for applying ({id}). We are sorry we cannot take this application forward: {why}. We will keep your details and contact you if this changes.',
+      hi: 'प्रिय {name}, आवेदन ({id}) के लिए धन्यवाद। हमें खेद है कि हम इस आवेदन को आगे नहीं बढ़ा पा रहे हैं: {why}। हम आपका विवरण सुरक्षित रखेंगे और स्थिति बदलने पर आपसे संपर्क करेंगे।',
+      kn: 'ಆತ್ಮೀಯ {name}, ಅರ್ಜಿ ({id}) ಸಲ್ಲಿಸಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದಗಳು. ಕ್ಷಮಿಸಿ, ನಾವು ಈ ಅರ್ಜಿಯನ್ನು ಮುಂದುವರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ: {why}. ನಿಮ್ಮ ವಿವರಗಳನ್ನು ಇಟ್ಟುಕೊಳ್ಳುತ್ತೇವೆ ಮತ್ತು ಪರಿಸ್ಥಿತಿ ಬದಲಾದರೆ ಸಂಪರ್ಕಿಸುತ್ತೇವೆ.'
+    }
+  };
+  if (r.outcome === 'Hold') {
+    var asks = r.issues.filter(function (i) { return i.level === 'hold' && ASK[i.code]; }).map(function (i) {
+      return fill(ASK[i.code][L], { min: cfg.minSpace, need: i.need || '' });
+    });
+    m.ask = asks.join(L === 'en' ? '; ' : '; ');
+  }
+  if (r.outcome === 'Reject') {
+    var rj = r.issues.filter(function (i) { return i.level === 'reject'; })[0];
+    m.why = rj && REJECT_WHY[rj.code] ? REJECT_WHY[rj.code][L] : '';
+  }
+  var tpl = T[r.outcome];
+  if (!tpl) return '';
+  var text = tpl[L];
+  if (r.outcome === 'Approve' && L === 'en') text = text.replace('in English', 'in ' + (a.lang || 'English'));
+  return fill(text, m);
+}
+
+var api = {
+  CITIES: CITIES, STORES: STORES, DEFAULT_CFG: DEFAULT_CFG, NEAREST_CITY: NEAREST_CITY,
+  parseApplications: parseApplications, parseTerritories: parseTerritories,
+  evaluateApp: evaluateApp, run: run, explain: explain, onboardingPlan: onboardingPlan, letter: letter,
+  freePins: freePins, clone: clone, canonCity: canonCity, num: num, strengths: strengths, pad: pad
+};
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.Engine = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* sample.js */
+(function (root) {
+var APP_HEAD = ['Application ID','Applicant name','City','State','Pin code','Investment capacity (₹ lakh)','Retail experience (years)','Current / past business','Space available','Space size (sq ft)','Floor','Target launch (months)','Preferred language','Notes from applicant'];
+var APPS = [
+ ['APP-001','Ravi Shankar','Mysuru','Karnataka',570001,25,4,'Runs a footwear store','Rented',450,'Ground',3,'Kannada','Wants to open before Diwali'],
+ ['APP-002','Lakshmi Devi','Mysuru','Karnataka',570001,40,6,'Runs a mobile accessories shop','Owned',380,'Ground',2,'Kannada','Shop is on the main road'],
+ ['APP-003','Mohammed Irfan','Mysuru','Karnataka',570002,30,2,'Garment retail','Rented',320,'Mall unit',4,'English',''],
+ ['APP-004','Suresh Gowda','Mysuru','Karnataka',570008,28,0,'IT professional','Rented',400,'Ground',6,'Kannada','First business'],
+ ['APP-005','Anitha Rao','Mysuru','Karnataka',570009,35,5,'Stationery shop owner','Rented',350,'Ground',3,'Kannada',''],
+ ['APP-006','Prakash N','Mysuru','Karnataka',570099,30,3,'Electronics trading','Owned',500,'Ground',3,'English',''],
+ ['APP-007','Divya Shetty','Mangaluru','Karnataka',575002,32,3,'Boutique owner','Not yet identified','','Not known',4,'Kannada','Looking for a ground floor shop near the market'],
+ ['APP-008','Karthik B','Bengaluru','Karnataka',560002,55,8,'Supermarket store manager','Rented',600,'Ground',3,'English',''],
+ ['APP-009','Farah Khan','Bengaluru','Karnataka',560050,38,2,'Cosmetics retail','Not yet identified','','Not known',3,'Hindi','Already have a ground floor shop, lease signed'],
+ ['APP-010','Nikhil Joshi','Hubballi-Dharwad','Karnataka',580021,18,4,'Mobile shop','Rented',350,'Ground',3,'Hindi',''],
+ ['APP-011','Basavaraj','Hubballi-Dharwad','Karnataka',580023,12,1,'Kirana store','Rented',300,'Ground',2,'Kannada',''],
+ ['APP-012','Meera Iyer','Tumakuru','Karnataka',572101,22,1,'Tailoring shop','Not yet identified','','Not known',4,'Kannada','Will rent once approved'],
+ ['APP-013','Ramesh Patil','Belagavi','Karnataka',590002,26,3,'Hardware shop','Owned',280,'Upper',3,'Kannada',''],
+ ['APP-014','Sunita Hegde','Davanagere','Karnataka',577001,24,0,'Homemaker','Rented',300,'Ground',1,'Kannada','Bank loan sanction expected next month'],
+ ['APP-015','Arjun Reddy','Bengaluru','Karnataka',560002,45,3,'Sports goods retail','Rented',500,'Ground',3,'English',''],
+ ['APP-016','Pooja Menon','Bengaluru','Karnataka',560068,42,4,'Lifestyle store','Rented',420,'Mall unit',4,'Hindi',''],
+ ['APP-017','Imran Sheikh','Tumakuru','Karnataka',575001,25,2,'Trading','Rented',320,'Ground',3,'English',''],
+ ['APP-018','Girish Kamath','Tumakuru','Karnataka',572102,21,2,'Provision store','Rented',260,'Ground',3,'English',''],
+ ['APP-019','Savitha K','Mysuru','Karnataka',570010,27,3,'Gift shop','Owned',330,'Ground',3,'Kannada',''],
+ ['APP-020','Vinay Prasad','Mysuru','Karnataka',570011,33,4,'Optical shop assistant','Rented',400,'Ground',3,'Kannada','']
+];
+var TER_HEAD = ['Territory ID','City','State','Pin codes covered','City tier','Open slots','Priority'];
+var TERS = [
+ ['TER-01','Mysuru','Karnataka','570001, 570002, 570008, 570009','Tier 2',3,'High'],
+ ['TER-02','Mysuru','Karnataka','570010, 570011, 570017','Tier 2',1,'Medium'],
+ ['TER-03','Bengaluru','Karnataka','560002, 560034, 560038, 560050, 560068','Tier 1',2,'High'],
+ ['TER-04','Bengaluru','Karnataka','560066, 560076, 560100, 560102','Tier 1',2,'Medium'],
+ ['TER-05','Mangaluru','Karnataka','575001, 575002, 575003, 575006','Tier 2',1,'High'],
+ ['TER-06','Hubballi-Dharwad','Karnataka','580020, 580021, 580023, 580029','Tier 2',2,'Medium'],
+ ['TER-07','Belagavi','Karnataka','590001, 590002, 590006','Tier 2',1,'Low'],
+ ['TER-08','Tumakuru','Karnataka','572101, 572102, 572103','Tier 3',2,'High'],
+ ['TER-09','Davanagere','Karnataka','577001, 577002, 577004','Tier 3',1,'Medium']
+];
+var api = {
+  appsAoA: [['Applications - one row per record. Enter data from row 3.'], APP_HEAD].concat(APPS),
+  tersAoA: [['Territories - one row per record. Enter data from row 3.'], TER_HEAD].concat(TERS)
+};
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.SampleData = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* ui.js */
+(function () {
+'use strict';
+var E = window.Engine, SD = window.SampleData;
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+var OUT = ['Approve', 'Waitlist', 'Hold', 'Reject'];
+var OUT_CLASS = { Approve: 'ok', Waitlist: 'wait', Hold: 'hold', Reject: 'no', Withdrawn: 'gone' };
+
+// Extension points so new features can live in their own files (src/modules/*.js load before this file, src/ext/*.js after it)
+window.DeskExt = window.DeskExt || {};
+['afterSummary', 'tabs', 'afterRender', 'answerers'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
+function extHtml() {
+  return window.DeskExt.afterSummary.map(function (fn) { try { return fn(S) || ''; } catch (e) { return '<p class="muted pad">A section failed to load: ' + esc(e.message) + '</p>'; } }).join('');
+}
+function extTab(id) { return window.DeskExt.tabs.filter(function (t) { return t.id === id; })[0]; }
+
+var S = {
+  apps: [], ters: [], cfg: E.clone(E.DEFAULT_CFG), run: null, prevSnap: null, changed: {},
+  notices: [], tab: 'decisions', filter: 'all', q: '', open: {}, letterLang: {}, undo: [], label: '',
+  exampleApp: null, exampleTer: null, askLog: []
+};
+
+/* ------------------------------------------------------------------ */
+/* Loading                                                             */
+/* ------------------------------------------------------------------ */
+function load(appsAoA, tersAoA, label) {
+  var apps = E.parseApplications(appsAoA), ters = E.parseTerritories(tersAoA), notices = [];
+  S.exampleApp = null; S.exampleTer = null;
+
+  var ex = apps.filter(function (a) { return a.templateExample; })[0];
+  if (ex) {
+    var twin = apps.filter(function (a) { return a !== ex && a.id.indexOf('APP-001#') === 0; })[0];
+    if (twin) {
+      apps = apps.filter(function (a) { return a !== ex; }); twin.id = 'APP-001';
+      notices.push('Row ' + ex.row + ' was the grey template example (APP-001, Ravi Kumar), so it was left out; the real APP-001 was kept.');
+    } else {
+      S.exampleApp = ex;
+      notices.push('Row ' + ex.row + ' looks like the grey template example (APP-001, Ravi Kumar). It is included as an applicant. <button class="link" data-act="drop-example-app">Leave it out</button>');
+    }
+  }
+  var et = ters.filter(function (t) { return t.templateExample; })[0];
+  if (et) {
+    var twinT = ters.filter(function (t) { return t !== et && t.id === 'TER-01'; })[0];
+    if (twinT) { ters = ters.filter(function (t) { return t !== et; }); notices.push('The template example territory (TER-01, row ' + et.row + ') was left out because the file defines its own TER-01.'); }
+    else { S.exampleTer = et; notices.push('Row ' + et.row + ' of Territories looks like the grey template example (TER-01). It is included. <button class="link" data-act="drop-example-ter">Leave it out</button>'); }
+  }
+  var seenTid = {}; ters.forEach(function (t) { seenTid[t.id] = (seenTid[t.id] || 0) + 1; });
+  Object.keys(seenTid).forEach(function (k) { if (seenTid[k] > 1) notices.push('Territory ID ' + esc(k) + ' appears ' + seenTid[k] + ' times; each row is treated as its own territory.'); });
+  var tmp = E.run(apps, ters, E.STORES, S.cfg);
+  if (tmp.ctx.dupPins.length) notices.push('Pin code' + (tmp.ctx.dupPins.length > 1 ? 's ' : ' ') + tmp.ctx.dupPins.join(', ') + ' appear in more than one territory; the first territory listed owns it.');
+  var dupIds = apps.filter(function (a) { return a.id.indexOf('#') > 0; });
+  if (dupIds.length) notices.push('Duplicate application IDs were renamed: ' + dupIds.map(function (a) { return esc(a.id); }).join(', ') + '.');
+
+  S.apps = apps; S.ters = ters; S.notices = notices; S.cfg = E.clone(E.DEFAULT_CFG);
+  S.undo = []; S.changed = {}; S.open = {}; S.prevSnap = null; S.askLog = []; S.label = label || '';
+  S.initial = E.clone({ apps: apps, ters: ters });
+  recompute(true);
+  S.tab = 'decisions'; S.filter = 'all'; S.q = '';
+  render();
+}
+
+function recompute(first) {
+  var before = S.run ? snapshot() : null;
+  S.run = E.run(S.apps, S.ters, E.STORES, S.cfg);
+  var after = snapshot();
+  var diff = [];
+  if (before && !first) {
+    Object.keys(after).forEach(function (id) {
+      var b = before[id], a = after[id];
+      if (!b) diff.push({ id: id, from: 'New', to: a.outcome });
+      else if (b.outcome !== a.outcome) diff.push({ id: id, from: b.outcome, to: a.outcome });
+      else if (a.outcome === 'Approve' && b.pin !== a.pin) diff.push({ id: id, from: 'Approve', to: 'Approve', note: 'pin ' + b.pin + ' to ' + a.pin });
+    });
+    Object.keys(before).forEach(function (id) { if (!after[id]) diff.push({ id: id, from: before[id].outcome, to: 'Withdrawn' }); });
+  }
+  S.changed = {};
+  diff.forEach(function (d) { S.changed[d.id] = d.from; });
+  return diff;
+}
+function snapshot() {
+  var m = {};
+  S.apps.forEach(function (a) {
+    var r = S.run.res[a.id];
+    m[a.id] = { outcome: a.withdrawn ? 'Withdrawn' : (r ? r.outcome : 'Hold'), pin: a.pin, score: r ? r.score : 0 };
+  });
+  return m;
+}
+function getApp(id) { return S.apps.filter(function (a) { return a.id === id; })[0]; }
+function pill(o, small) { return '<span class="pill ' + OUT_CLASS[o] + (small ? ' sm' : '') + '">' + esc(o) + '</span>'; }
+function fmtDate(d) { return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); }
+function addWeeks(w) { var d = new Date(); d.setDate(d.getDate() + w * 7); return d; }
+
+/* ------------------------------------------------------------------ */
+/* Rendering                                                           */
+/* ------------------------------------------------------------------ */
+function render() {
+  var root = $('#app');
+  if (!S.run) { root.innerHTML = emptyState(); return; }
+  root.innerHTML =
+    '<section class="workspace">' +
+      '<div class="primary">' + summaryHtml() + noticesHtml() + extHtml() + tabsHtml() + '<div id="tabbody">' + tabBody() + '</div></div>' +
+      '<aside class="ask" id="ask">' + askHtml() + '</aside>' +
+    '</section>';
+  scrollAskToEnd();
+  window.DeskExt.afterRender.forEach(function (fn) { try { fn(S); } catch (e) { console.error(e); } });
+}
+
+function emptyState() {
+  return '<section class="empty">' +
+    '<h1>Every franchise application, decided and explained.</h1>' +
+    '<p class="lede">Upload the Applications and Territories workbook. Each partner gets an outcome, the reason, what to do next and a training plan. Pin codes are protected so the brand never opens two stores in one.</p>' +
+    '<div class="drop" id="drop"><strong>Drop the .xlsx here</strong><span>or</span>' +
+      '<label class="btn primary">Choose a file<input type="file" id="file2" accept=".xlsx,.xls" hidden></label>' +
+      '<button class="btn" data-act="sample">Try the sample data</button></div>' +
+    '<p class="fine">Nothing is uploaded anywhere: the workbook is read and decided inside your browser. <button class="link" data-act="dl-sample">Download a sample workbook</button> to see the expected layout.</p>' +
+  '</section>';
+}
+
+function summaryHtml() {
+  var counts = { Approve: 0, Waitlist: 0, Hold: 0, Reject: 0 }, gone = 0;
+  S.apps.forEach(function (a) { if (a.withdrawn) { gone++; return; } var r = S.run.res[a.id]; if (r) counts[r.outcome]++; });
+  var total = counts.Approve + counts.Waitlist + counts.Hold + counts.Reject;
+  var slots = 0, filled = 0;
+  S.ters.forEach(function (t) { slots += t.slots; filled += Math.min(t.slots, S.run.approvedByTer[t.id] || 0); });
+  var locked = 0; S.ters.forEach(function (t) { t.pins.forEach(function (p) { if (S.run.ctx.storeByPin[p]) locked++; }); });
+  var bar = OUT.map(function (o) { return counts[o] ? '<i class="seg ' + OUT_CLASS[o] + '" style="flex:' + counts[o] + '" title="' + o + ' ' + counts[o] + '"></i>' : ''; }).join('');
+  var legend = OUT.map(function (o) {
+    return '<button class="leg" data-act="filter" data-v="' + o + '"><span class="dot ' + OUT_CLASS[o] + '"></span><b>' + counts[o] + '</b> ' + { Approve: 'approved', Waitlist: 'waitlisted', Hold: 'on hold', Reject: 'rejected' }[o] + '</button>';
+  }).join('');
+  return '<div class="summary">' +
+    '<div class="sum-top"><h2>' + total + ' applications' + (S.label ? ' <span class="muted">from ' + esc(S.label) + '</span>' : '') + '</h2>' +
+    '<div class="sum-meta">' + filled + ' of ' + slots + ' territory slots filled. ' + locked + ' pin codes locked by existing stores.' + (gone ? ' ' + gone + ' withdrawn.' : '') + '</div></div>' +
+    '<div class="bar" role="img" aria-label="Outcome split">' + bar + '</div><div class="legend">' + legend + '</div></div>';
+}
+
+function noticesHtml() {
+  if (!S.notices.length) return '';
+  return '<div class="notices">' + S.notices.map(function (n) { return '<p>' + n + '</p>'; }).join('') + '</div>';
+}
+
+function tabsHtml() {
+  var t = [['decisions', 'Decisions'], ['board', 'Pin board'], ['assume', 'Assumptions']].concat(window.DeskExt.tabs.map(function (x) { return [x.id, x.label]; }));
+  return '<div class="tabs" role="tablist">' + t.map(function (x) {
+    return '<button role="tab" class="tab' + (S.tab === x[0] ? ' on' : '') + '" aria-selected="' + (S.tab === x[0]) + '" data-act="tab" data-v="' + x[0] + '">' + x[1] + '</button>';
+  }).join('') + '<span class="grow"></span><button class="btn sm" data-act="export">Export decisions</button></div>';
+}
+
+function tabBody() {
+  var xt = extTab(S.tab); if (xt) return xt.render(S);
+  if (S.tab === 'board') return boardHtml();
+  if (S.tab === 'assume') return assumeHtml();
+  return decisionsHtml();
+}
+
+/* ---------- Decisions ---------- */
+function decisionsHtml() {
+  var q = S.q.trim().toLowerCase();
+  var chips = ['all'].concat(OUT).map(function (o) {
+    return '<button class="chip' + (S.filter === o ? ' on' : '') + '" data-act="filter" data-v="' + o + '">' + (o === 'all' ? 'All' : o) + '</button>';
+  }).join('');
+  var rows = S.apps.filter(function (a) {
+    var r = S.run.res[a.id], o = a.withdrawn ? 'Withdrawn' : r.outcome;
+    if (S.filter !== 'all' && o !== S.filter) return false;
+    if (q && (a.id + ' ' + a.name + ' ' + a.pin + ' ' + a.city).toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  }).map(rowHtml).join('');
+  return '<div class="toolbar"><div class="chips">' + chips + '</div>' +
+    '<input id="q" class="search" type="search" placeholder="Search ID, name, pin, city" value="' + esc(S.q) + '" aria-label="Search applications"></div>' +
+    '<div class="rows">' + (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
+}
+
+function rowHtml(a) {
+  var r = S.run.res[a.id];
+  if (a.withdrawn) {
+    return '<article class="row gone"><div class="row-h"><span class="rid">' + esc(a.id) + '</span><span class="rname">' + esc(a.name) + '</span>' + pill('Withdrawn') + '<span class="rwhy muted">Withdrawn by applicant</span></div></article>';
+  }
+  var x = E.explain(r, a, { cfg: S.cfg, run: S.run });
+  var open = !!S.open[a.id];
+  var was = S.changed[a.id] ? '<span class="was">was ' + esc(S.changed[a.id]) + '</span>' : '';
+  var score = (r.outcome === 'Approve' || r.outcome === 'Waitlist') ? '<span class="score">' + r.score + '</span>' : '<span class="score off">–</span>';
+  return '<article class="row' + (open ? ' open' : '') + '" id="row-' + esc(a.id) + '">' +
+    '<button class="row-h" data-act="toggle" data-v="' + esc(a.id) + '" aria-expanded="' + open + '">' +
+      '<span class="rid">' + esc(a.id) + '</span>' +
+      '<span class="rname">' + esc(a.name) + '<small>' + esc(a.city) + ', ' + esc(a.pin) + '</small></span>' +
+      '<span class="rout">' + pill(r.outcome) + was + '</span>' + score +
+      '<span class="rwhy">' + esc(x.short || x.headline) + '</span>' +
+      '<span class="chev" aria-hidden="true"></span></button>' +
+    (open ? detailHtml(a, r, x) : '') + '</article>';
+}
+
+function detailHtml(a, r, x) {
+  var lang = S.letterLang[a.id] || a.lang || 'English';
+  var why = x.lines.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('');
+  var next = x.next.length ? '<h4>' + (r.outcome === 'Hold' ? 'What would change this' : r.outcome === 'Waitlist' ? 'What would move this up' : 'Next') + '</h4>' + x.next.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') : '';
+  var plan = '';
+  if (r.outcome === 'Approve') {
+    var p = E.onboardingPlan(r, a, { cfg: S.cfg, run: S.run });
+    plan = '<h4>Onboarding plan</h4><p class="muted">' + esc(p.track) + ' training in ' + esc(p.language) + ', shadowing at ' + esc(p.mentor.id) + ' (' + esc(p.mentor.city) + '). Realistic opening ' + fmtDate(addWeeks(p.openWeeks)) + ' if signed this week. ' + esc(p.targetNote) + '</p>' +
+      '<ol class="tl">' + p.steps.map(function (s) { return '<li><b>' + esc(s.wk) + '</b> ' + esc(s.title) + '<span>' + esc(s.detail) + '</span></li>'; }).join('') + '</ol>' +
+      (p.conditions.length ? '<p class="cond"><b>Conditions to clear:</b> ' + p.conditions.map(esc).join('; ') + '.</p>' : '');
+  }
+  var bars = Object.keys(r.parts).map(function (k) {
+    var p = r.parts[k], w = p.max ? Math.round(100 * p.pts / p.max) : 0;
+    return '<div class="bp"><div class="bp-l"><span>' + esc(p.label) + '</span><b>' + (Math.round(p.pts * 10) / 10) + '<small>/' + p.max + '</small></b></div><div class="track"><i style="width:' + w + '%"></i></div><small class="muted">' + esc(p.note) + '</small></div>';
+  }).join('');
+  var flags = r.issues.length ? r.issues.map(function (i) {
+    return '<li class="fl ' + i.level + '"><span class="fdot"></span><span><b>' + esc(i.title) + '.</b> ' + esc(i.detail) + '</span></li>';
+  }).join('') : '<li class="fl clean"><span class="fdot"></span><span>No data problems found.</span></li>';
+  var msg = E.letter(r, a, lang, S.cfg);
+  var langs = [['English', 'EN'], ['Hindi', 'हिं'], ['Kannada', 'ಕನ್ನಡ']].map(function (l) {
+    return '<button class="seg-b' + (lang === l[0] ? ' on' : '') + '" data-act="lang" data-id="' + esc(a.id) + '" data-v="' + l[0] + '">' + l[1] + '</button>';
+  }).join('');
+  var rec = [['Investment', a.invest === null ? 'not given' : 'Rs ' + a.invest + ' lakh'], ['Experience', a.exp === null ? 'not given' : a.exp + ' yrs'], ['Business', a.biz || 'not given'],
+    ['Space', a.space + (a.size !== null ? ', ' + a.size + ' sq ft' : '') + ', ' + a.floor.toLowerCase()], ['Target launch', a.launch === null ? 'not given' : a.launch + ' months'], ['Training language', a.lang || 'not given'], ['Notes', a.notes || 'none']]
+    .map(function (z) { return '<dt>' + z[0] + '</dt><dd>' + esc(z[1]) + '</dd>'; }).join('');
+  return '<div class="detail"><div class="dcol"><h4>Why</h4>' + why + next + plan + '</div>' +
+    '<div class="dcol"><h4>' + (r.outcome === 'Hold' || r.outcome === 'Reject' ? 'Indicative score (not ranked)' : 'Score out of 100') + '</h4>' + bars +
+    '<h4>Data flags</h4><ul class="flags">' + flags + '</ul>' +
+    '<h4>Message to the applicant</h4><div class="seg-g">' + langs + '</div><p class="letter" lang="' + (lang === 'Hindi' ? 'hi' : lang === 'Kannada' ? 'kn' : 'en') + '">' + esc(msg) + '</p>' +
+    '<button class="btn sm" data-act="copy" data-id="' + esc(a.id) + '">Copy message</button>' +
+    '<h4>What was submitted</h4><dl class="rec">' + rec + '</dl></div></div>';
+}
+
+/* ---------- Pin board ---------- */
+function boardHtml() {
+  var run = S.run, parts = [];
+  var legend = '<div class="b-legend"><span><i class="tile t-store"></i>Existing store, pin locked</span><span><i class="tile t-ok"></i>Approved</span><span><i class="tile t-wait"></i>Eligible applicants queued</span><span><i class="tile t-hold"></i>On hold, targeting this pin</span><span><i class="tile t-open"></i>Open</span></div>';
+  S.ters.forEach(function (t) {
+    var filled = Math.min(t.slots, run.approvedByTer[t.id] || 0);
+    var dots = ''; for (var i = 0; i < t.slots; i++) dots += '<i class="sdot' + (i < filled ? ' on' : '') + '"></i>';
+    var tiles = t.pins.map(function (p) {
+      var st = run.ctx.storeByPin[p], ap = run.approvedPins[p];
+      var here = S.apps.filter(function (a) { return !a.withdrawn && a.pin === p; });
+      var queued = here.filter(function (a) { var r = run.res[a.id]; return r.outcome === 'Waitlist'; });
+      var holds = here.filter(function (a) { return run.res[a.id].outcome === 'Hold'; });
+      var cls = 't-open', lab = 'open', title = p + ': open';
+      if (st) { cls = 't-store'; lab = st.id; title = p + ': ' + st.id + ' already open since ' + st.year; }
+      else if (ap) { cls = 't-ok'; lab = ap; title = p + ': approved for ' + ap + (queued.length ? ' (' + queued.length + ' waitlisted)' : ''); }
+      else if (queued.length) { cls = 't-wait'; lab = queued.length + ' queued'; title = p + ': ' + queued.map(function (a) { return a.id; }).join(', ') + ' waitlisted'; }
+      else if (holds.length) { cls = 't-hold'; lab = holds[0].id; title = p + ': ' + holds.map(function (a) { return a.id; }).join(', ') + ' on hold'; }
+      var extra = (ap && queued.length) ? '<em>+' + queued.length + '</em>' : '';
+      return '<button class="tile ' + cls + '" data-act="pin" data-v="' + p + '" title="' + esc(title) + '"><b>' + p.slice(0, 3) + '<u>' + p.slice(3) + '</u></b><span>' + esc(lab) + '</span>' + extra + '</button>';
+    }).join('');
+    parts.push('<section class="terr"><header><div><h3>' + esc(t.id) + ' ' + esc(t.city) + '</h3><span class="muted">' + esc(t.tier) + ', ' + esc(t.priority) + ' priority</span></div>' +
+      '<div class="slots" title="' + filled + ' of ' + t.slots + ' slots filled"><span class="dots">' + dots + '</span><small>' + filled + ' of ' + t.slots + ' slots</small></div></header><div class="tiles">' + tiles + '</div></section>');
+  });
+  var outside = S.apps.filter(function (a) { return !a.withdrawn && !S.run.res[a.id].ter; });
+  var out = outside.length ? '<section class="terr"><header><div><h3>Not on the board</h3><span class="muted">Pin code is outside every territory or could not be read</span></div></header><div class="outside">' +
+    outside.map(function (a) { return '<button class="chip" data-act="open-app" data-v="' + esc(a.id) + '">' + esc(a.id) + ' ' + esc(a.pin || '?') + '</button>'; }).join('') + '</div></section>' : '';
+  return legend + '<div class="board">' + parts.join('') + '</div>' + out;
+}
+
+/* ---------- Assumptions ---------- */
+function numIn(path, val, step, unit) {
+  return '<label class="fld"><input type="number" step="' + (step || 1) + '" value="' + val + '" data-cfg="' + path + '"><span>' + unit + '</span></label>';
+}
+function assumeHtml() {
+  var c = S.cfg, W = c.weights, sum = 0; for (var k in W) sum += W[k];
+  return '<div class="assume"><p class="lede sm">Every number the engine uses is here. Change one and all decisions, pins and rankings update immediately.</p>' +
+    '<div class="a-grid">' +
+    '<section><h4>Minimum investment, Rs lakh</h4>' +
+      '<div class="a-row"><span>Tier 1 city</span>' + numIn('floors.Tier 1', c.floors['Tier 1'], 1, 'lakh') + '</div>' +
+      '<div class="a-row"><span>Tier 2 city</span>' + numIn('floors.Tier 2', c.floors['Tier 2'], 1, 'lakh') + '</div>' +
+      '<div class="a-row"><span>Tier 3 city</span>' + numIn('floors.Tier 3', c.floors['Tier 3'], 1, 'lakh') + '</div>' +
+      '<div class="a-row"><span>Reject below</span>' + numIn('rejectRatio', Math.round(c.rejectRatio * 100), 5, '% of floor') + '</div>' +
+      '<p class="muted sm">Between the cut-off and the floor the application is held, so a co-investor can close the gap. Anchored to the Rs 20 to 35 lakh range quoted publicly for a Lenskart-type store.</p></section>' +
+    '<section><h4>Space</h4>' +
+      '<div class="a-row"><span>Hard minimum</span>' + numIn('minSpace', c.minSpace, 10, 'sq ft') + '</div>' +
+      '<div class="a-row"><span>Ideal from</span>' + numIn('idealMin', c.idealMin, 10, 'sq ft') + '</div>' +
+      '<div class="a-row"><span>Ideal up to</span>' + numIn('idealMax', c.idealMax, 10, 'sq ft') + '</div>' +
+      '<p class="muted sm">Upper floors are held; ground floor and mall units pass.</p></section>' +
+    '<section><h4>Timing and training</h4>' +
+      '<div class="a-row"><span>Earliest opening</span>' + numIn('earliestWeeks', c.earliestWeeks, 1, 'weeks') + '</div>' +
+      '<div class="a-row"><span>Extra if no space</span>' + numIn('noSpaceExtraWeeks', c.noSpaceExtraWeeks, 1, 'weeks') + '</div>' +
+      '<div class="a-row"><span>First-timer below</span>' + numIn('firstTimerYears', c.firstTimerYears, 1, 'years') + '</div>' +
+      '<p class="muted sm">First-timers get the 3-week extended training track.</p></section>' +
+    '<section><h4>Spacing from existing stores</h4>' +
+      '<div class="a-row"><span>High risk within</span>' + numIn('cannibNear', c.cannibNear, 1, 'pin numbers') + '</div>' +
+      '<div class="a-row"><span>Medium risk within</span>' + numIn('cannibMid', c.cannibMid, 1, 'pin numbers') + '</div>' +
+      '<p class="muted sm">Pin-number distance is a rough stand-in for real distance. With sales data this becomes a catchment-overlap model.</p></section>' +
+    '<section class="wide"><h4>Score weights (total ' + sum + ')</h4><div class="w-grid">' +
+      [['capital', 'Capital'], ['experience', 'Experience'], ['space', 'Space'], ['timeline', 'Timeline'], ['cannibal', 'Spacing'], ['data', 'Data confidence']].map(function (w) {
+        return '<div class="a-row"><span>' + w[1] + '</span>' + numIn('weights.' + w[0], W[w[0]], 1, 'pts') + '</div>'; }).join('') + '</div></section>' +
+    '</div><button class="btn" data-act="reset-cfg">Restore default assumptions</button>' +
+    '<h4 class="mt">How a decision is made</h4><ol class="rules">' +
+      '<li>Check the data: pin code against the city prefix, against existing stores and against the territories; space against the notes.</li>' +
+      '<li>Reject only when it cannot be fixed soon: no territory in the city, or investment far below the floor.</li>' +
+      '<li>Hold when something fixable is missing or contradictory, and say exactly what would change the decision.</li>' +
+      '<li>Score the rest. One store per pin code: the top score takes the pin. Then each territory keeps its top scorers up to its open slots.</li>' +
+      '<li>Everyone eligible who loses a pin or a slot is waitlisted with the reason and the trigger that would promote them.</li></ol></div>';
+}
+
+/* ---------- Ask the desk ---------- */
+function askHtml() {
+  var holdId = S.apps.filter(function (x) { var r = S.run.res[x.id]; return !x.withdrawn && r && r.outcome === 'Hold' && r.ifFixed && r.ifFixed.possible && r.ifFixed.outcome === 'Approve'; }).map(function (x) { return x.id; })[0] || firstOf('Hold');
+  var appr = firstOf('Approve'), wl = firstOf('Waitlist');
+  var sugg = [];
+  if (holdId) sugg.push('Why is ' + holdId + ' on hold?');
+  if (holdId) sugg.push('What would it take for ' + holdId + '?');
+  if (appr) sugg.push('Who is competing with ' + appr + '?');
+  if (holdId) sugg.push(holdId + ' has now found a ground-floor space');
+  if (wl) sugg.push('Why is ' + wl + ' waitlisted?');
+  sugg.push('Give me a summary');
+  var log = S.askLog.map(function (m) {
+    return m.who === 'me' ? '<div class="msg me">' + esc(m.text) + '</div>' : '<div class="msg desk">' + m.html + '</div>';
+  }).join('');
+  return '<div class="ask-in"><header><h2>Ask the desk</h2><p class="muted sm">Ask why, or tell it something new. Decisions update right away.</p></header>' +
+    '<div class="log" id="log" aria-live="polite">' + (log || '<div class="msg desk">Try one of these, or type your own question.</div>') + '</div>' +
+    '<div class="sugg">' + sugg.slice(0, 5).map(function (s) { return '<button class="chip" data-act="sugg" data-v="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div>' +
+    '<div class="composer"><input id="askin" type="text" placeholder="e.g. APP-012 has found a 400 sq ft ground-floor shop" autocomplete="off" aria-label="Ask a question or give new information"><button class="btn primary" data-act="ask">Ask</button></div>' +
+    '<div class="ask-tools"><button class="link" data-act="undo"' + (S.undo.length ? '' : ' disabled') + '>Undo last change</button><button class="link" data-act="reset-data">Restore uploaded data</button></div></div>';
+}
+function firstOf(o) { var a = S.apps.filter(function (x) { return !x.withdrawn && S.run.res[x.id] && S.run.res[x.id].outcome === o; })[0]; return a ? a.id : ''; }
+function scrollAskToEnd() { var l = $('#log'); if (l) l.scrollTop = l.scrollHeight; }
+
+/* ------------------------------------------------------------------ */
+/* Understanding questions and new information                         */
+/* ------------------------------------------------------------------ */
+var NUMW = { one: 1, two: 2, three: 3, four: 4, five: 5, another: 1, a: 1 };
+
+function findIds(text) {
+  var ids = [], seen = {};
+  (text.match(/\bapp[-\s_]?0*(\d{1,4})\b/gi) || []).forEach(function (m) {
+    var n = parseInt(m.replace(/\D/g, ''), 10);
+    var a = S.apps.filter(function (x) { return parseInt(x.id.replace(/\D.*$/, '').replace(/\D/g, ''), 10) === n || x.id === 'APP-' + E.pad(n, 3); })[0];
+    var id = a ? a.id : 'APP-' + E.pad(n, 3);
+    if (!seen[id]) { seen[id] = 1; ids.push(id); }
+  });
+  if (!ids.length) {
+    var low = text.toLowerCase();
+    S.apps.forEach(function (a) {
+      var first = a.name.toLowerCase().split(/\s+/)[0];
+      if (first.length >= 4 && new RegExp('\\b' + first.replace(/[^a-z]/g, '') + '\\b').test(low) && !seen[a.id]) { seen[a.id] = 1; ids.push(a.id); }
+    });
+  }
+  return ids;
+}
+function findTers(text) {
+  var out = [];
+  (text.match(/\bter[-\s_]?0*(\d{1,3})\b/gi) || []).forEach(function (m) {
+    var n = parseInt(m.replace(/\D/g, ''), 10);
+    var t = S.ters.filter(function (x) { return parseInt(x.id.replace(/\D/g, ''), 10) === n; })[0];
+    if (t && out.indexOf(t.id) < 0) out.push(t.id);
+  });
+  return out;
+}
+
+function parseFields(low) {
+  var f = {};
+  var spaceWord = /(space|shop|premises|property|store|unit|showroom|outlet|place|location|building)/.test(low);
+  var foundVerb = /(found|got|secured|signed|identified|finali[sz]ed|has (a|the)|have (a|the)|taken|leased|rented|bought|acquired|booked|arranged|moved|shifted|switched|now (has|have|in))/.test(low);
+  if (spaceWord && foundVerb) {
+    f.spaceFound = true;
+    if (/\bown(ed)?\b|bought|purchased/.test(low)) f.space = 'Owned';
+    else if (/rent|lease/.test(low)) f.space = 'Rented';
+  }
+  if (/ground[\s-]?floor|\bground\b/.test(low)) f.floor = 'Ground';
+  else if (/\bmall\b/.test(low)) f.floor = 'Mall unit';
+  else if (/(upper floor|first floor|1st floor|second floor|2nd floor|terrace)/.test(low)) f.floor = 'Upper';
+  var sz = low.match(/(\d{2,4})\s*(sq\.?\s?ft|sqft|square\s?feet|sq\s?feet|sft)/); if (sz) f.size = +sz[1];
+  var cr = low.match(/(\d+(?:\.\d+)?)\s*(crore|cr)\b/);
+  var lk = low.match(/(\d+(?:\.\d+)?)\s*(lakh|lakhs|lac|lacs|l)\b/);
+  if (/(invest|capital|fund|budget|money|raise|put in|afford)/.test(low)) {
+    if (cr) f.invest = Math.round(parseFloat(cr[1]) * 100);
+    else if (lk) f.invest = parseFloat(lk[1]);
+    else { var m2 = low.match(/(?:invest\w*|capital|budget|funds?)\D{0,25}(\d+(?:\.\d+)?)/); if (m2) { var v = parseFloat(m2[1]); f.invest = v > 1000 ? v / 100000 : v; } }
+  }
+  var ex = low.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)/);
+  if (ex && /(experience|worked|ran|runs|run a|managed|retail)/.test(low)) f.exp = parseFloat(ex[1]);
+  var ln = low.match(/(\d+(?:\.\d+)?)\s*months?/);
+  if (ln && /(launch|open|start|ready)/.test(low)) f.launch = parseFloat(ln[1]);
+  var pn = low.match(/\b(\d{6})\b/); if (pn) f.pin = pn[1];
+  if (/(prefer|language|training in|speaks|switch to)/.test(low)) { if (/kannada/.test(low)) f.lang = 'Kannada'; else if (/hindi/.test(low)) f.lang = 'Hindi'; else if (/english/.test(low)) f.lang = 'English'; }
+  if (/(withdr|drop(ped)? out|dropping out|no longer interested|pulled out|backed out|not interested|cancel)/.test(low)) f.withdraw = true;
+  return f;
+}
+
+function parseTerritoryChange(low) {
+  var f = {};
+  var sl = low.match(/(\d+|one|two|three|four|five|another)\s*(?:more|extra|additional|new)?\s*slots?/) || low.match(/slots?\D{0,12}(\d+)/);
+  if (sl) {
+    var n = isNaN(+sl[1]) ? NUMW[sl[1]] : +sl[1];
+    f.slots = n; f.add = /(more|extra|additional|another|add|new slot)/.test(low);
+  }
+  var pr = low.match(/(high|medium|low)\s*priority|priority\D{0,12}(high|medium|low)/);
+  if (pr) f.priority = (pr[1] || pr[2]).replace(/^./, function (c) { return c.toUpperCase(); });
+  return f;
+}
+
+function pushUndo() { S.undo.push({ apps: E.clone(S.apps), ters: E.clone(S.ters), cfg: E.clone(S.cfg) }); if (S.undo.length > 20) S.undo.shift(); }
+
+function applyAppFields(a, f) {
+  var did = [];
+  if (f.withdraw) { a.withdrawn = true; did.push('withdrawn'); return did; }
+  var spaceTouched = false;
+  if (f.spaceFound || f.size !== undefined || f.floor !== undefined) {
+    if (f.space) a.space = f.space;
+    else if (a.space === 'Not yet identified') a.space = 'Rented';
+    if (a.space !== 'Not yet identified' && f.spaceFound && !(a.space === 'Owned' || a.space === 'Rented')) a.space = 'Rented';
+    if (f.size !== undefined) { a.size = f.size; a.sizeAssumed = false; did.push('space ' + f.size + ' sq ft'); }
+    else if (a.size === null) { a.sizeAssumed = true; }
+    if (f.floor) { a.floor = f.floor; did.push(f.floor.toLowerCase() + (f.floor === 'Mall unit' ? '' : ' floor')); }
+    did.unshift(a.space.toLowerCase() + ' space');
+    spaceTouched = true;
+  }
+  if (f.invest !== undefined) { a.invest = f.invest; did.push('investment Rs ' + f.invest + ' lakh'); }
+  if (f.exp !== undefined) { a.exp = f.exp; did.push('experience ' + f.exp + ' years'); }
+  if (f.launch !== undefined) { a.launch = f.launch; did.push('target launch ' + f.launch + ' months'); }
+  if (f.pin) { a.pin = f.pin; a.pinRaw = f.pin; did.push('pin ' + f.pin); }
+  if (f.lang) { a.lang = f.lang; did.push('training language ' + f.lang); S.letterLang[a.id] = f.lang; }
+  if (spaceTouched || f.pin) a.notesSuperseded = true;
+  return did;
+}
+
+function diffHtml(diff) {
+  if (!diff.length) return '<p class="muted">No other decisions changed.</p>';
+  return '<ul class="diff">' + diff.slice(0, 14).map(function (d) {
+    var a = getApp(d.id);
+    return '<li><button class="link" data-act="open-app" data-v="' + esc(d.id) + '"><b>' + esc(d.id) + '</b> ' + esc(a ? a.name : '') + '</button> ' + (d.from === d.to ? esc(d.note || 'moved') : pill(d.from, true) + ' to ' + pill(d.to, true)) + '</li>';
+  }).join('') + (diff.length > 14 ? '<li class="muted">and ' + (diff.length - 14) + ' more</li>' : '') + '</ul>';
+}
+
+function explainCard(id) {
+  var a = getApp(id);
+  if (!a) return '<p>I cannot find ' + esc(id) + ' in this file.</p>';
+  if (a.withdrawn) return '<p><b>' + esc(id) + '</b> ' + esc(a.name) + ' has withdrawn, so it holds no pin and no slot.</p>';
+  var r = S.run.res[id], x = E.explain(r, a, { cfg: S.cfg, run: S.run });
+  return '<p><b>' + esc(id) + '</b> ' + esc(a.name) + ' ' + pill(r.outcome) + '</p><p><b>' + esc(x.headline) + '.</b></p>' +
+    x.lines.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') + x.next.map(function (l) { return '<p class="nx">' + esc(l) + '</p>'; }).join('') +
+    '<button class="link" data-act="open-app" data-v="' + esc(id) + '">Open full record</button>';
+}
+
+function competitorsCard(id) {
+  var a = getApp(id); if (!a || a.withdrawn) return explainCard(id);
+  var r = S.run.res[id];
+  var rivals = S.apps.filter(function (b) { return b.id !== id && !b.withdrawn && S.run.res[b.id] && (S.run.res[b.id].outcome === 'Approve' || S.run.res[b.id].outcome === 'Waitlist') && (b.pin === a.pin || (r.ter && S.run.res[b.id].ter && S.run.res[b.id].ter.id === r.ter.id)); });
+  if (!r.ter) return '<p><b>' + esc(id) + '</b> is not in any territory, so it competes with nobody for a slot.</p>';
+  if (!rivals.length) return '<p><b>' + esc(id) + '</b> has no eligible rivals for pin ' + esc(a.pin) + ' or for the slots in ' + esc(r.ter.id) + '.</p>';
+  rivals.sort(function (p, q) { return S.run.res[q.id].score - S.run.res[p.id].score; });
+  return '<p><b>' + esc(id) + '</b> scores ' + r.score + ' (' + r.outcome.toLowerCase() + '). Eligible rivals for pin ' + esc(a.pin) + ' and the ' + r.ter.slots + ' slot' + (r.ter.slots === 1 ? '' : 's') + ' in ' + esc(r.ter.id) + ':</p>' +
+    '<ul class="diff">' + rivals.map(function (b) { var rb = S.run.res[b.id]; return '<li><button class="link" data-act="open-app" data-v="' + esc(b.id) + '"><b>' + esc(b.id) + '</b> ' + esc(b.name) + '</button> ' + pill(rb.outcome, true) + ' score ' + rb.score + ', pin ' + esc(b.pin) + '</li>'; }).join('') + '</ul>';
+}
+
+function compareCard(i1, i2) {
+  var a = getApp(i1), b = getApp(i2); if (!a || !b) return '<p>I need two application IDs in this file to compare.</p>';
+  var r1 = S.run.res[i1], r2 = S.run.res[i2];
+  var rows = Object.keys(r1.parts).map(function (k) { return '<tr><td>' + esc(r1.parts[k].label) + '</td><td>' + Math.round(r1.parts[k].pts * 10) / 10 + '</td><td>' + Math.round(r2.parts[k].pts * 10) / 10 + '</td></tr>'; }).join('');
+  return '<table class="cmp"><thead><tr><th></th><th>' + esc(i1) + '<br>' + pill(r1.outcome, true) + '</th><th>' + esc(i2) + '<br>' + pill(r2.outcome, true) + '</th></tr></thead><tbody>' + rows +
+    '<tr class="tot"><td>Total</td><td>' + r1.score + '</td><td>' + r2.score + '</td></tr></tbody></table>';
+}
+
+function territoryCard(tid) {
+  var t = S.ters.filter(function (x) { return x.id === tid; })[0]; if (!t) return '<p>Territory not found.</p>';
+  var run = S.run, appr = S.apps.filter(function (a) { return !a.withdrawn && t.pins.indexOf(a.pin) >= 0 && run.res[a.id].outcome === 'Approve'; });
+  var wl = S.apps.filter(function (a) { return !a.withdrawn && t.pins.indexOf(a.pin) >= 0 && run.res[a.id].outcome === 'Waitlist'; });
+  var locked = t.pins.filter(function (p) { return run.ctx.storeByPin[p]; });
+  var free = E.freePins(run, t.city).filter(function (p) { return p.ter === tid; });
+  return '<p><b>' + esc(t.id) + '</b> ' + esc(t.city) + ', ' + esc(t.tier) + ', ' + esc(t.priority) + ' priority. ' + appr.length + ' of ' + t.slots + ' slots filled.</p>' +
+    '<p>Approved: ' + (appr.map(function (a) { return esc(a.id) + ' (' + esc(a.pin) + ')'; }).join(', ') || 'none') + '.</p>' +
+    '<p>Waitlisted: ' + (wl.map(function (a) { return esc(a.id); }).join(', ') || 'none') + '.</p>' +
+    '<p>Locked by existing stores: ' + (locked.join(', ') || 'none') + '. Open pins: ' + (free.map(function (p) { return p.pin; }).join(', ') || 'none') + '.</p>';
+}
+
+function listCard(o) {
+  var items = S.apps.filter(function (a) { return !a.withdrawn && S.run.res[a.id].outcome === o; });
+  if (!items.length) return '<p>No applications are currently ' + { Approve: 'approved', Waitlist: 'waitlisted', Hold: 'on hold', Reject: 'rejected' }[o] + '.</p>';
+  var lbl = { Approve: 'approved', Waitlist: 'waitlisted', Hold: 'on hold', Reject: 'not taken forward' }[o];
+  return '<p>' + items.length + ' ' + lbl + ':</p><ul class="diff">' + items.map(function (a) {
+    var r = S.run.res[a.id], x = E.explain(r, a, { cfg: S.cfg, run: S.run });
+    return '<li><button class="link" data-act="open-app" data-v="' + esc(a.id) + '"><b>' + esc(a.id) + '</b> ' + esc(a.name) + '</button> ' + esc(x.headline) + '</li>';
+  }).join('') + '</ul>';
+}
+
+function summaryCard() {
+  var c = { Approve: 0, Waitlist: 0, Hold: 0, Reject: 0 }, reasons = {};
+  S.apps.forEach(function (a) { if (a.withdrawn) return; var r = S.run.res[a.id]; c[r.outcome]++; if (r.outcome === 'Hold') r.issues.filter(function (i) { return i.level === 'hold'; }).forEach(function (i) { reasons[i.title] = (reasons[i.title] || 0) + 1; }); });
+  var top = Object.keys(reasons).sort(function (a, b) { return reasons[b] - reasons[a]; }).slice(0, 3);
+  var full = S.ters.filter(function (t) { return (S.run.approvedByTer[t.id] || 0) >= t.slots; }).map(function (t) { return t.id; });
+  return '<p>' + c.Approve + ' approved, ' + c.Waitlist + ' waitlisted, ' + c.Hold + ' on hold, ' + c.Reject + ' not taken forward.</p>' +
+    (top.length ? '<p>Most common reasons for a hold: ' + top.map(function (k) { return k.toLowerCase() + ' (' + reasons[k] + ')'; }).join('; ') + '.</p>' : '') +
+    (full.length ? '<p>Territories with every slot filled: ' + full.join(', ') + '.</p>' : '');
+}
+
+function helpCard() {
+  return '<p>I can answer in plain language, and I can take new information:</p><ul class="diff"><li>Why is APP-007 on hold?</li><li>What would it take for APP-010?</li><li>Who is competing with APP-003?</li><li>Compare APP-001 and APP-002</li><li>Tell me about TER-01</li><li>List all holds</li><li>APP-012 has found a 400 sq ft ground-floor shop</li><li>APP-010 can now invest 30 lakh</li><li>APP-004 withdrew</li><li>TER-02 has one more slot</li></ul>';
+}
+
+function answer(text) {
+  var low = text.toLowerCase().trim();
+  if (!low) return '';
+  for (var xi = 0; xi < window.DeskExt.answerers.length; xi++) {
+    var xr = window.DeskExt.answerers[xi](text, window.__desk); if (xr) return xr;
+  }
+  if (/^(undo|revert)\b/.test(low) || /\bundo (that|the last|last)/.test(low)) { return doUndo(true); }
+  var ids = findIds(text), tids = findTers(text);
+  var infoCue = /\b(now|found|just|updated?|changed?|secured|signed|withdr\w*|dropped|dropping|instead|since)\b/.test(low);
+  var questionish = /^(why|how|what|who|which|list|show|explain|compare|tell|give|is|are|can|does|do|summar)/.test(low) && !/\bwhat if\b/.test(low) && !infoCue;
+  if (/\b(why|how come|explain|reason|what happened)\b/.test(low) && !infoCue) questionish = true;
+
+  if (/\b(help|what can you do|how do i use)\b/.test(low)) return helpCard();
+  if (/\b(summary|summari[sz]e|overview|how are we doing|big picture)\b/.test(low)) return summaryCard();
+  var lm = low.match(/\b(list|show|which)\b[^.?]*\b(approved|waitlisted|waitlist|on hold|holds|hold|rejected|reject|approvals)\b/);
+  if (lm && !ids.length) { var w = lm[2]; return listCard(/approv/.test(w) ? 'Approve' : /wait/.test(w) ? 'Waitlist' : /hold/.test(w) ? 'Hold' : 'Reject'); }
+  if (/\bhow many\b/.test(low) && !ids.length) return summaryCard();
+
+  if (!questionish) {
+    // new information about an applicant
+    if (ids.length >= 1 && !tids.length) {
+      var a = getApp(ids[0]);
+      if (a) {
+        var f = parseFields(low);
+        var keys = Object.keys(f);
+        if (keys.length) {
+          pushUndo();
+          var did = applyAppFields(a, f);
+          var diff = recompute();
+          render();
+          var note = '';
+          if (f.spaceFound && a.sizeAssumed) note = '<p class="nx">No size was given, so I assumed it meets the ' + S.cfg.minSpace + ' sq ft minimum and made confirming it a condition of approval.</p>';
+          if (f.spaceFound && a.floor === 'Not known') note += '<p class="nx">The floor was not stated, so confirming it is a condition too.</p>';
+          return '<p class="ap">Recorded for <b>' + esc(a.id) + '</b> ' + esc(a.name) + ': ' + esc(did.join(', ') || 'update') + '.' + ((f.spaceFound || f.size !== undefined || f.floor !== undefined || f.pin) ? ' Older free-text notes about the space no longer count.' : '') + '</p>' + note +
+            '<p><b>What changed</b></p>' + diffHtml(diff) + explainCard(a.id);
+        }
+      }
+    }
+    if (tids.length) {
+      var t = S.ters.filter(function (x) { return x.id === tids[0]; })[0], tf = parseTerritoryChange(low);
+      if (t && (tf.slots !== undefined || tf.priority)) {
+        pushUndo();
+        var d2 = [];
+        if (tf.slots !== undefined) { var nv = tf.add ? t.slots + tf.slots : tf.slots; d2.push('open slots ' + t.slots + ' to ' + nv); t.slots = nv; }
+        if (tf.priority) { d2.push('priority ' + t.priority + ' to ' + tf.priority); t.priority = tf.priority; }
+        var diff2 = recompute(); render();
+        return '<p class="ap">Updated <b>' + esc(t.id) + '</b>: ' + esc(d2.join(', ')) + '.</p><p><b>What changed</b></p>' + diffHtml(diff2) + territoryCard(t.id);
+      }
+    }
+  }
+  // what if X ... applies as new information too
+  if (/\bwhat if\b/.test(low) && ids.length) {
+    var a2 = getApp(ids[0]), f2 = parseFields(low);
+    if (a2 && Object.keys(f2).length) { pushUndo(); var did2 = applyAppFields(a2, f2), df = recompute(); render();
+      return '<p class="ap">Applied as a scenario for <b>' + esc(a2.id) + '</b>: ' + esc(did2.join(', ')) + '. Use Undo to go back.</p><p><b>What changed</b></p>' + diffHtml(df) + explainCard(a2.id); }
+  }
+
+  if (/\bcompar/.test(low) && ids.length >= 2) return compareCard(ids[0], ids[1]);
+  if (tids.length && !ids.length) return territoryCard(tids[0]);
+  if (ids.length) {
+    if (/(compet|rival|against|ahead of|beat|rank|behind)/.test(low)) return competitorsCard(ids[0]);
+    return explainCard(ids[0]);
+  }
+  return '<p>I did not catch which application or territory you mean. Mention an ID like APP-007 or TER-02.</p>' + helpCard();
+}
+
+function doUndo(fromChat) {
+  var u = S.undo.pop();
+  if (!u) return fromChat ? '<p>Nothing to undo.</p>' : '';
+  S.apps = u.apps; S.ters = u.ters; S.cfg = u.cfg;
+  var diff = recompute(); render();
+  return fromChat ? '<p class="ap">Last change undone.</p>' + diffHtml(diff) : '';
+}
+
+function ask(text) {
+  text = String(text || '').trim(); if (!text) return;
+  S.askLog.push({ who: 'me', text: text });
+  var html;
+  try { html = answer(text); } catch (e) { html = '<p>Something went wrong reading that: ' + esc(e.message) + '</p>'; }
+  S.askLog.push({ who: 'desk', html: html });
+  var asideEl = $('#ask'); if (asideEl) asideEl.innerHTML = askHtml();
+  scrollAskToEnd();
+  var inp = $('#askin'); if (inp) inp.focus();
+}
+
+/* ------------------------------------------------------------------ */
+/* Workbook reading and writing                                        */
+/* ------------------------------------------------------------------ */
+function handleFile(file) {
+  if (!file) return;
+  var rd = new FileReader();
+  rd.onerror = function () { showError('The file could not be read.'); };
+  rd.onload = function (ev) {
+    try {
+      var wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
+      var names = wb.SheetNames, find = function (rx) { return names.filter(function (n) { return rx.test(n.toLowerCase()); })[0]; };
+      var an = find(/applic/) || names[0], tn = find(/territor/) || names[1];
+      if (!tn || tn === an) throw new Error('The workbook needs two sheets: Applications and Territories.');
+      var toAoA = function (n) { return XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }); };
+      load(toAoA(an), toAoA(tn), file.name);
+      hideError();
+    } catch (e) { showError(e.message || String(e)); }
+  };
+  rd.readAsArrayBuffer(file);
+}
+function showError(m) { var b = $('#err'); b.textContent = m; b.hidden = false; }
+function hideError() { var b = $('#err'); b.hidden = true; }
+
+function downloadSample() {
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(SD.appsAoA), 'Applications');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(SD.tersAoA), 'Territories');
+  var st = [['Store ID', 'City', 'Pin code', 'Opened (year)']].concat(E.STORES.map(function (s) { return [s.id, s.city, +s.pin, s.year]; }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Existing stores - fixed'], st[0]].concat(st.slice(1))), 'Existing stores');
+  XLSX.writeFile(wb, 'territory-desk-sample.xlsx');
+}
+
+function exportDecisions() {
+  if (!S.run) return;
+  var rows = [['Application ID', 'Applicant', 'City', 'Pin code', 'Territory', 'Outcome', 'Score', 'Rank on pin', 'Why', 'Next step or what would change this', 'Conditions', 'Training language', 'Training track', 'Mentor store', 'Realistic opening (weeks)', 'Message to applicant']];
+  S.apps.forEach(function (a) {
+    if (a.withdrawn) { rows.push([a.id, a.name, a.city, a.pin, '', 'Withdrawn', '', '', 'Withdrawn by applicant', '', '', '', '', '', '', '']); return; }
+    var r = S.run.res[a.id], x = E.explain(r, a, { cfg: S.cfg, run: S.run }), p = r.outcome === 'Approve' ? E.onboardingPlan(r, a, { cfg: S.cfg, run: S.run }) : null;
+    rows.push([a.id, a.name, a.city, a.pin, r.ter ? r.ter.id : '', r.outcome, (r.outcome === 'Approve' || r.outcome === 'Waitlist') ? r.score : '', r.rankPin ? r.rankPin + ' of ' + r.pinN : '',
+      [x.headline].concat(x.lines).join(' '), x.next.join(' '), r.conditions && r.outcome === 'Approve' ? r.conditions.join('; ') : '', a.lang || 'English',
+      p ? p.track : '', p ? p.mentor.id : '', p ? p.openWeeks : '', E.letter(r, a, a.lang || 'English', S.cfg)]);
+  });
+  var wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [10, 18, 16, 9, 9, 9, 6, 9, 60, 60, 40, 10, 20, 8, 10, 60].map(function (w) { return { wch: w }; });
+  XLSX.utils.book_append_sheet(wb, ws, 'Decisions');
+  var brows = [['Territory', 'City', 'Tier', 'Priority', 'Open slots', 'Slots filled', 'Pin code', 'Status']];
+  S.ters.forEach(function (t) { t.pins.forEach(function (p) {
+    var st = S.run.ctx.storeByPin[p], ap = S.run.approvedPins[p];
+    brows.push([t.id, t.city, t.tier, t.priority, t.slots, Math.min(t.slots, S.run.approvedByTer[t.id] || 0), p, st ? 'Locked: ' + st.id : ap ? 'Approved: ' + ap : 'Open']);
+  }); });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(brows), 'Pin board');
+  XLSX.writeFile(wb, 'franchise-decisions.xlsx');
+}
+
+/* ------------------------------------------------------------------ */
+/* Events                                                              */
+/* ------------------------------------------------------------------ */
+function refreshBody() { var b = $('#tabbody'); if (b) b.innerHTML = tabBody(); }
+function setPath(obj, path, val) { var p = path.split('.'), o = obj; for (var i = 0; i < p.length - 1; i++) o = o[p[i]]; o[p[p.length - 1]] = val; }
+
+document.addEventListener('click', function (e) {
+  var el = e.target.closest('[data-act]'); if (!el) return;
+  var act = el.getAttribute('data-act'), v = el.getAttribute('data-v');
+  switch (act) {
+    case 'sample': load(SD.appsAoA, SD.tersAoA, 'sample data'); break;
+    case 'dl-sample': downloadSample(); break;
+    case 'export': exportDecisions(); break;
+    case 'tab': S.tab = v; render(); break;
+    case 'filter': S.filter = v; S.tab = 'decisions'; render(); break;
+    case 'toggle': S.open[v] = !S.open[v]; refreshBody(); break;
+    case 'lang': S.letterLang[el.getAttribute('data-id')] = v; refreshBody(); break;
+    case 'copy': {
+      var a = getApp(el.getAttribute('data-id')), r = S.run.res[a.id];
+      var txt = E.letter(r, a, S.letterLang[a.id] || a.lang || 'English', S.cfg);
+      var done = function () { el.textContent = 'Copied'; setTimeout(function () { el.textContent = 'Copy message'; }, 1400); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, done);
+      else { var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (x) {} document.body.removeChild(ta); done(); }
+      break; }
+    case 'pin': S.tab = 'decisions'; S.filter = 'all'; S.q = v; render(); break;
+    case 'open-app': S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.open[v] = true; render();
+      var row = document.getElementById('row-' + v); if (row) row.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
+    case 'ask': { var i = $('#askin'); ask(i.value); break; }
+    case 'sugg': ask(v); break;
+    case 'undo': doUndo(false); break;
+    case 'reset-data': if (S.run && S.initial) { pushUndo(); S.apps = E.clone(S.initial.apps); S.ters = E.clone(S.initial.ters); recompute(); render(); } break;
+    case 'reset-cfg': pushUndo(); S.cfg = E.clone(E.DEFAULT_CFG); recompute(); render(); break;
+    case 'drop-example-app': S.apps = S.apps.filter(function (a) { return !a.templateExample; }); S.notices = S.notices.filter(function (n) { return n.indexOf('drop-example-app') < 0; }); recompute(); render(); break;
+    case 'drop-example-ter': S.ters = S.ters.filter(function (t) { return !t.templateExample; }); S.notices = S.notices.filter(function (n) { return n.indexOf('drop-example-ter') < 0; }); recompute(); render(); break;
+  }
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter' && e.target && e.target.id === 'askin') { e.preventDefault(); ask(e.target.value); }
+});
+document.addEventListener('input', function (e) {
+  if (e.target.id === 'q') { S.q = e.target.value; var rows = $('.rows'); var cur = e.target.selectionStart; refreshBody(); var q2 = $('#q'); if (q2) { q2.focus(); q2.setSelectionRange(cur, cur); } }
+});
+document.addEventListener('change', function (e) {
+  var p = e.target.getAttribute && e.target.getAttribute('data-cfg');
+  if (p) {
+    var val = parseFloat(e.target.value); if (isNaN(val)) return;
+    if (p === 'rejectRatio') val = val / 100;
+    pushUndo(); setPath(S.cfg, p, val);
+    var diff = recompute(); render();
+    S.tab = 'assume'; render();
+    S.askLog.push({ who: 'desk', html: '<p class="ap">Assumption changed (' + esc(p) + ' = ' + esc(e.target.value) + ').</p><p><b>What changed</b></p>' + diffHtml(diff) });
+    var asideEl = $('#ask'); if (asideEl) asideEl.innerHTML = askHtml(); scrollAskToEnd();
+  }
+  if (e.target.id === 'file' || e.target.id === 'file2') handleFile(e.target.files[0]);
+});
+['dragover', 'drop'].forEach(function (ev) { document.addEventListener(ev, function (e) {
+  e.preventDefault();
+  if (ev === 'drop' && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+}); });
+
+render();
+window.__desk = { S: S, E: E, ask: ask, load: load, rerender: render, recompute: recompute, getApp: getApp, esc: esc, pill: pill, pushUndo: pushUndo, getRun: function () { return S.run; } };
+})();
+
+</script>
+</body>
+</html>
