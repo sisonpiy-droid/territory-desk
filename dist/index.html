@@ -1271,6 +1271,44 @@ root.DeskGeo = api;
 
 </script>
 <script>
+/* modules\golive.js */
+// Go-live gate: the checks an approved partner must pass before the store can be marked open.
+// Each gate has an owner and a due date counted back from the planned opening (src/modules/plan.js).
+// State: S.gates[appId][gateKey] = true when green.
+(function (root) {
+'use strict';
+var DAY = 86400000;
+// days before opening each gate is due (assumptions, editable here only; based on the 10-week onboarding path)
+var GATES = [
+  { key: 'shop', short: 'Shop licence', title: 'Shop and establishment licence in hand', owner: 'Partner', before: 28 },
+  { key: 'gst', short: 'GST', title: 'GST registration done', owner: 'Partner', before: 28 },
+  { key: 'fitout', short: 'Fit-out', title: 'Fit-out signed off', owner: 'Fit-out vendor', before: 21 },
+  { key: 'training', short: 'Training', title: 'Training completed and certified', owner: 'Training team', before: 14 },
+  { key: 'stock', short: 'Opening stock', title: 'Opening stock delivered', owner: 'Expansion team', before: 10 },
+  { key: 'signage', short: 'Signage', title: 'Signage installed', owner: 'Fit-out vendor', before: 7 },
+  { key: 'pos', short: 'POS dry run', title: 'POS dry run passed', owner: 'Training team', before: 5 }
+];
+
+function gates(planned, done, now) {
+  done = done || {};
+  var t = new Date(now || Date.now()); t.setHours(0, 0, 0, 0);
+  var list = GATES.map(function (g) {
+    var due = new Date(planned.getTime() - g.before * DAY);
+    return { key: g.key, title: g.title, owner: g.owner, due: due, done: !!done[g.key], overdue: !done[g.key] && due < t };
+  });
+  var n = list.filter(function (g) { return g.done; }).length;
+  return { list: list, done: n, total: list.length, readiness: n / list.length, ready: n === list.length,
+           overdue: list.filter(function (g) { return g.overdue; }).length,
+           next: list.filter(function (g) { return !g.done; }).sort(function (a, b) { return a.due - b.due; })[0] || null };
+}
+
+var api = { GATES: GATES, gates: gates };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.DeskGoLive = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
 /* modules\ops.js */
 // Operations view logic: pipeline and leakage, the team's worklist, territory health, before and after, adoption metrics.
 // Pure functions of the app state S ({ apps, ters, run, cfg, overrides? }). No DOM here.
@@ -1479,6 +1517,43 @@ var api = { DATA_CODES: DATA_CODES, DEFAULT_TIME: DEFAULT_TIME, pipeline: pipeli
   territoryHealth: territoryHealth, beforeAfter: beforeAfter, newTracker: newTracker, track: track, adoption: adoption };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.DeskOps = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* modules\payback.js */
+// Payback band: an illustrative range of months to recover the store investment. Not a forecast.
+// No brand data exists for sales or costs, so the placeholders below were set (calibrated) so that a typical store
+// costing Rs 25 to 35 lakh pays back in 12 to 18 months in the base case: the range publicly quoted, unofficially,
+// for a Lenskart-type store (see docs/research-notes.md). Every input is editable on screen.
+(function (root) {
+'use strict';
+var DEFAULTS = {
+  sales: { worst: 5.5, base: 6.7, best: 8.0 },   // monthly sales, Rs lakh
+  margin: 0.45,                                    // gross margin on sales
+  running: 1.0,                                    // monthly running costs (rent, staff, utilities), Rs lakh
+  invest: 'floor'                                  // 'floor': the store cost for the city tier; 'applicant': the applicant's stated capacity
+};
+
+function months(invest, sales, cfg) {
+  var monthly = sales * cfg.margin - cfg.running;
+  return monthly > 0 ? invest / monthly : null;   // null: never pays back at these numbers
+}
+// investment basis for an applicant: the tier's minimum investment (store cost) or their own figure
+function band(a, tierFloor, cfg) {
+  cfg = cfg || DEFAULTS;
+  var inv = cfg.invest === 'applicant' && a.invest ? a.invest : tierFloor;
+  if (!inv) return null;
+  var m = function (k) { return months(inv, cfg.sales[k], cfg); };
+  return { invest: inv, best: m('best'), base: m('base'), worst: m('worst'),
+           monthly: { best: cfg.sales.best * cfg.margin - cfg.running, base: cfg.sales.base * cfg.margin - cfg.running, worst: cfg.sales.worst * cfg.margin - cfg.running } };
+}
+// the calibration claim, checked: base-case months for a Rs 25 and a Rs 35 lakh store
+function calibration(cfg) { cfg = cfg || DEFAULTS; return { low: months(25, cfg.sales.base, cfg), high: months(35, cfg.sales.base, cfg) }; }
+
+var api = { DEFAULTS: DEFAULTS, months: months, band: band, calibration: calibration };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.DeskPayback = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -3040,12 +3115,75 @@ document.head.appendChild(css);
 
 </script>
 <script>
+/* ext\fairness.js */
+// Data and fairness tab: which fields shape a decision and which never do, the override audit, where the data goes,
+// and a descriptive look at outcomes by city tier and by preferred language (with a small-sample warning).
+(function () {
+'use strict';
+var D = window.__desk, S = D.S, esc = D.esc, pill = D.pill;
+var OUTS = ['Approve', 'Waitlist', 'Hold', 'Reject'], SMALL = 10;
+
+// Kept in step with evaluateApp in src/engine.js: every field the form has, and exactly how it is used
+var FIELDS = [
+  ['Pin code and city', 'Yes', 'Territory and slot, one store per pin, pin-city mismatch, distance from existing stores (spacing points).'],
+  ['Investment capacity', 'Yes', 'Compared with the minimum for the city tier: hold if slightly short, reject if far short; capital points.'],
+  ['Space available, size, floor', 'Yes', 'Hold if no space, too small or upper floor; space points.'],
+  ['Retail experience (years)', 'Score only', 'Experience points; first-timers get the extended training track.'],
+  ['Current or past business', 'Score only', 'A retail background keeps full experience points (others get 85%); checked against the years given.'],
+  ['Target launch', 'Score only', 'Timeline points and the onboarding plan.'],
+  ['Notes from applicant', 'Yes', 'Checked for contradictions with the form (a hold) and for a pending loan (a data flag and a condition).'],
+  ['Applicant name', 'Barely', 'Only to spot a possible duplicate application: a match costs 2.5 of the 10 data-confidence points and adds a condition. Never used otherwise.'],
+  ['Preferred language', 'No', 'Only for the training language and the messages to the applicant.'],
+  ['State', 'No', 'Not used.']
+];
+
+function groupTable(label, keyOf, groups) {
+  var rows = groups.map(function (g) {
+    var apps = S.apps.filter(function (a) { return !a.withdrawn && S.run.res[a.id] && keyOf(a) === g; });
+    var c = {}; OUTS.forEach(function (o) { c[o] = apps.filter(function (a) { return S.run.res[a.id].outcome === o; }).length; });
+    var n = apps.length;
+    return '<tr><td>' + esc(g || 'Not given') + '</td><td>' + n + '</td>' + OUTS.map(function (o) { return '<td>' + c[o] + '</td>'; }).join('') +
+      '<td>' + (n ? Math.round(100 * c.Approve / n) + '%' : '–') + (n && n < SMALL ? ' <small class="muted">too few to compare</small>' : '') + '</td></tr>';
+  }).join('');
+  return '<h4 class="mt">By ' + label + '</h4><div class="tscroll"><table class="cmp fr-t"><thead><tr><th>' + label.charAt(0).toUpperCase() + label.slice(1) + '</th><th>Applications</th>' + OUTS.map(function (o) { return '<th>' + pill(o, true) + '</th>'; }).join('') + '<th>Approval rate</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function tabHtml() {
+  var res = S.run.res;
+  var ovr = S.apps.filter(function (a) { return res[a.id] && res[a.id].override; });
+  var audit = ovr.length ? '<ul class="fr-l">' + ovr.map(function (a) {
+    var o = res[a.id].override; return '<li><b>' + esc(a.id) + '</b> ' + esc(a.name) + ': ' + (o.applied ? 'set to ' + esc(o.to) : 'override to ' + esc(o.to) + ' refused (' + esc(o.refused) + ')') + '. Reason given: ' + esc(o.reason || 'none') + '.</li>';
+  }).join('') + '</ul><p class="muted sm">Every override, with its time, is also in the Decision log and the export.</p>' : '<p class="muted sm">No overrides in this session. Any override is logged with its reason and time in the Decision log and the export.</p>';
+  var tiers = ['Tier 1', 'Tier 2', 'Tier 3', null], langs = ['Kannada', 'Hindi', 'English', ''];
+  var tierOf = function (a) { var r = res[a.id]; return r && r.tier ? r.tier : null; };
+  return '<div class="fr"><h3>Data and fairness</h3>' +
+    '<h4 class="mt">What shapes a decision</h4><div class="tscroll"><table class="cmp fr-t"><thead><tr><th>Field in the form</th><th>Can change the outcome?</th><th>How it is used</th></tr></thead><tbody>' +
+      FIELDS.map(function (f) { return '<tr><td>' + esc(f[0]) + '</td><td>' + esc(f[1]) + '</td><td>' + esc(f[2]) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+    '<p class="muted sm">The form collects nothing about gender, age, religion or caste, so none of it can enter a decision. The Site finder\'s crowd estimate is not used for decisions either; its overlap check only adds a flag and a suggestion.</p>' +
+    '<h4 class="mt">Override audit</h4>' + audit +
+    '<h4 class="mt">Where the data goes</h4><ul class="fr-l"><li>The uploaded workbook is read and decided inside this browser. It is not sent anywhere and is gone when the page is closed.</li>' +
+      '<li>The only network requests are Site finder lookups for pins or places outside the built-in map. They send just that pin code or place name to this site\'s server and on to OpenStreetMap; no applicant details.</li>' +
+      '<li>Exports and printed memos are created on this computer.</li></ul>' +
+    '<h4 class="mt">Outcomes by group (descriptive only)</h4><p class="fr-warn">These counts describe this file; they do not show cause. Differences come from the inputs (investment, space, territory slots), since tier sets the investment minimum and language is never scored. Groups under ' + SMALL + ' applications are too small to compare.</p>' +
+    groupTable('city tier', tierOf, tiers) + groupTable('preferred language', function (a) { return a.lang || ''; }, langs) + '</div>';
+}
+window.DeskExt.tabs.push({ id: 'fair', label: 'Data and fairness', render: tabHtml });
+
+var css = document.createElement('style');
+css.textContent = '.fr h3 { font-family: var(--display); font-size: 17px; font-weight: 800; } .fr h4.mt { font-family: var(--display); font-size: 15px; margin: 18px 0 6px; }' +
+  ' .fr-t td, .fr-t th { text-align: left; vertical-align: top; } .fr-l { padding-left: 18px; font-size: 14px; } .fr-l li { margin-bottom: 4px; }' +
+  ' .fr-warn { font-size: 13.5px; border-left: 3px solid var(--hold); background: var(--surface); padding: 6px 10px; border-radius: 4px; }';
+document.head.appendChild(css);
+})();
+
+</script>
+<script>
 /* ext\followthrough.js */
 // Phase 2: overrides with a reason, backward onboarding plans and a stage board, the decision log, re-run triggers.
 // Logic lives in engine.js (overrides in allocation), src/modules/plan.js and src/modules/triggers.js.
 (function () {
 'use strict';
-var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, P = window.DeskPlan, TR = window.DeskTriggers;
+var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, P = window.DeskPlan, TR = window.DeskTriggers, GL = window.DeskGoLive;
 var OUTS = ['Approve', 'Waitlist', 'Hold', 'Reject'];
 S.log = []; S.stages = {};
 
@@ -3058,7 +3196,7 @@ function log(e) { e.at = new Date(); S.log.push(e); }
 /* ---------- decision log: every decision, override, what-if and change ---------- */
 window.DeskExt.afterRecompute.push(function (diff, first, cause) {
   if (first) {
-    S.log = []; S.stages = {}; S.loadedAt = new Date();
+    S.log = []; S.stages = {}; S.gates = {}; S.loadedAt = new Date();
     var n = S.apps.filter(function (a) { return !a.withdrawn; }).length;
     log({ kind: 'Upload', text: 'Decided ' + n + ' applications' + (S.label ? ' from ' + S.label : '') });
     S.apps.forEach(function (a) { var r = S.run.res[a.id]; if (r) log({ kind: 'Decision', id: a.id, to: r.outcome, text: short(a.id) }); });
@@ -3126,9 +3264,9 @@ function onboardHtml() {
       return '<div class="card-s' + (p.atRisk ? ' risk' : '') + '"><div class="cs-h">' + appLink(p.id) + ' <span>' + esc(a.name) + '</span></div>' +
         '<small>' + esc(a.city) + ', ' + esc(a.pin) + ' · opens ' + fmt(p.open) + '</small>' +
         (p.next ? '<p>' + esc(p.next.title) + '<br><span class="muted">' + esc(p.next.owner) + ', due ' + fmt(p.next.due) + (p.next.overdue ? ' (overdue)' : '') + '</span></p>' : '<p>Open</p>') +
-        (p.atRisk ? '<p class="risk">' + esc(p.risks.join('; ')) + '</p>' : '') +
+        (p.atRisk ? '<p class="risk">' + esc(p.risks.join('; ')) + '</p>' : '') + gateBadge(p) +
         '<div class="cs-b"><button class="btn sm" data-act="stage" data-id="' + esc(p.id) + '" data-v="-1"' + (i ? '' : ' disabled') + ' aria-label="Move back">‹</button>' +
-        '<button class="btn sm" data-act="stage" data-id="' + esc(p.id) + '" data-v="1"' + (i < P.STAGES.length - 1 ? '' : ' disabled') + '>Mark ' + esc((P.STAGES[i + 1] || 'done').toLowerCase()) + ' ›</button></div></div>';
+        '<button class="btn sm" data-act="stage" data-id="' + esc(p.id) + '" data-v="1"' + (i < P.STAGES.length - 1 && !(i === P.STAGES.length - 2 && !gateState(p).ready) ? '' : ' disabled title="Every go-live gate must be green first"') + '>Mark ' + esc((P.STAGES[i + 1] || 'done').toLowerCase()) + ' ›</button></div></div>';
     }).join('');
     return '<section class="col"><h4>' + esc(st) + ' <span class="muted">' + ps.filter(function (p) { return p.stage === i; }).length + '</span></h4>' + cards + '</section>';
   }).join('');
@@ -3144,8 +3282,28 @@ function onboardHtml() {
       '</tbody></table></details>';
   }).join('');
   return '<div class="onb"><p class="lede sm">' + ps.length + ' approved partner' + (ps.length === 1 ? '' : 's') + ', ' + risk + ' at risk. Each plan runs back from the target launch to the latest date the agreement can be signed; every step has an owner and a due date.</p>' +
-    '<div class="sboard">' + cols + '</div><h4 class="mt">Due in the next 14 days, by owner</h4><div class="owners">' + owners + '</div>' +
+    '<div class="sboard">' + cols + '</div>' + gatesHtml(ps) + '<h4 class="mt">Due in the next 14 days, by owner</h4><div class="owners">' + owners + '</div>' +
     '<h4 class="mt">Plans</h4>' + plans + '</div>';
+}
+
+/* ---------- go-live gates (src/modules/golive.js) ---------- */
+function gateState(p) { return GL ? GL.gates(p.open, (S.gates || {})[p.id], new Date()) : { ready: true, done: 0, total: 0, list: [] }; }
+function gateBadge(p) {
+  if (!GL) return '';
+  var g = gateState(p);
+  return '<div class="gbar' + (g.ready ? ' ok' : g.overdue ? ' late' : '') + '" title="Go-live gates: ' + g.done + ' of ' + g.total + ' green"><i style="width:' + Math.round(100 * g.readiness) + '%"></i></div>' +
+    '<small>Go-live ' + Math.round(100 * g.readiness) + '% (' + g.done + ' of ' + g.total + ')' + (g.overdue ? ', ' + g.overdue + ' overdue' : '') + '</small>';
+}
+function gatesHtml(ps) {
+  if (!GL) return '';
+  var head = GL.GATES.map(function (g) { return '<th title="' + esc(g.title) + '">' + esc(g.short) + '<br><small class="muted">' + esc(g.owner) + '</small></th>'; }).join('');
+  var rows = ps.map(function (p) {
+    var g = gateState(p), a = D.getApp(p.id);
+    return '<tr><td>' + appLink(p.id) + ' ' + esc(a.name) + '<br><small class="muted">' + Math.round(100 * g.readiness) + '% ready' + (g.ready ? '' : ', next: ' + esc(g.next.title.toLowerCase()) + ' by ' + fmt(g.next.due)) + '</small></td>' +
+      g.list.map(function (x) { return '<td class="' + (x.done ? 'g-ok' : x.overdue ? 'g-late' : '') + '"><label><input type="checkbox" data-act="gate" data-id="' + esc(p.id) + '" data-v="' + x.key + '"' + (x.done ? ' checked' : '') + '> ' + fmt(x.due).replace(/ \d{4}$/, '') + '</label></td>'; }).join('') + '</tr>';
+  }).join('');
+  return '<h4 class="mt">Go-live gates</h4><p class="muted sm">A store can be marked open only when every gate is green. Due dates count back from the planned opening; tick a gate when it is done.</p>' +
+    '<div class="tscroll"><table class="cmp gates"><thead><tr><th>Partner</th>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 /* ---------- Decision log tab ---------- */
@@ -3203,8 +3361,14 @@ function fromChat(id, to, why) { var html = setOverride(id, to, why); S.askLog.p
 
 /* ---------- events ---------- */
 document.addEventListener('click', function (e) {
-  var el = e.target.closest && e.target.closest('[data-act="ovr-set"],[data-act="ovr-clear"],[data-act="stage"]'); if (!el) return;
+  var el = e.target.closest && e.target.closest('[data-act="ovr-set"],[data-act="ovr-clear"],[data-act="stage"],[data-act="gate"]'); if (!el) return;
   var act = el.getAttribute('data-act'), id = el.getAttribute('data-id');
+  if (act === 'gate') {
+    var k = el.getAttribute('data-v'); S.gates[id] = S.gates[id] || {}; S.gates[id][k] = el.checked;
+    var gt = GL.GATES.filter(function (g) { return g.key === k; })[0];
+    log({ kind: 'Go-live gate', id: id, text: gt.title + (el.checked ? ': green' : ': not done') });
+    D.rerender(); return;
+  }
   if (act === 'ovr-clear') setOverride(id, null, '');
   else if (act === 'ovr-set') {
     var to = document.querySelector('[data-ovr-to="' + id + '"]').value, why = document.querySelector('[data-ovr-why="' + id + '"]').value.trim();
@@ -3212,6 +3376,8 @@ document.addEventListener('click', function (e) {
     setOverride(id, to, why);
   } else if (act === 'stage') {
     var cur = S.stages[id] || 0, nx = Math.max(0, Math.min(P.STAGES.length - 1, cur + parseInt(el.getAttribute('data-v'), 10)));
+    var pl = P.plans(S, new Date()).filter(function (x) { return x.id === id; })[0];
+    if (P.STAGES[nx] === 'Open' && pl && !gateState(pl).ready) { S.askLog.push({ who: 'desk', html: '<p>' + esc(id) + ' cannot be marked open yet: ' + gateState(pl).list.filter(function (g) { return !g.done; }).map(function (g) { return esc(g.title.toLowerCase()); }).join('; ') + '.</p>' }); D.rerender(); return; }
     S.stages[id] = nx; log({ kind: 'Stage', id: id, text: 'Moved to ' + P.STAGES[nx] });
     D.rerender();
   }
@@ -3248,6 +3414,8 @@ css.textContent = [
   '.cmp.lg td { text-align: left; vertical-align: top; } .cmp.lg td:nth-child(-n+3) { white-space: nowrap; }',
   '.kind { font-size: 12px; font-weight: 600; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; white-space: nowrap; }',
   '.kind.k-override { color: var(--accent); border-color: var(--accent); } .kind.k-what-if { color: var(--wait); border-color: var(--wait); }',
+  '.gbar { height: 5px; border-radius: 3px; background: var(--surface2); border: 1px solid var(--line); margin-top: 6px; overflow: hidden; } .gbar i { display: block; height: 100%; background: var(--accent); } .gbar.ok i { background: var(--ok); } .gbar.late i { background: var(--no); }',
+  '.gates td, .gates th { text-align: left; vertical-align: top; white-space: nowrap; font-size: 12.5px; } .gates td:first-child { white-space: normal; min-width: 150px; } .gates .g-ok { color: var(--ok); } .gates .g-late { color: var(--no); font-weight: 600; }',
   '@media (max-width: 1060px) { .owners { grid-template-columns: repeat(2, minmax(0, 1fr)); } }',
   '@media (max-width: 720px) { .owners { grid-template-columns: minmax(0, 1fr); } .sboard { grid-template-columns: repeat(7, 78vw); } }'
 ].join('\n');
@@ -3473,6 +3641,52 @@ css.textContent = [
   '  .ba-out { grid-template-columns: minmax(0, 1fr); } .ba-out.ad { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ba-grid { grid-template-columns: minmax(0, 1fr); }',
   '}'
 ].join('\n');
+document.head.appendChild(css);
+})();
+
+</script>
+<script>
+/* ext\payback.js */
+// Payback band on each record: best, base and worst months to recover the investment. Illustrative, not a forecast.
+(function () {
+'use strict';
+var D = window.__desk, S = D.S, esc = D.esc, PB = window.DeskPayback;
+var cfg = JSON.parse(JSON.stringify(PB.DEFAULTS));
+function mo(x) { return x == null ? 'never' : x.toFixed(0) + ' months'; }
+function inp(k, val, label, unit) { return '<label class="pb-in"><span>' + label + '</span><input type="number" step="0.1" min="0" value="' + val + '" data-pb="' + k + '"><small>' + unit + '</small></label>'; }
+
+window.DeskExt.afterDetail.push(function (a, r) {
+  if (r.outcome === 'Reject') return '';
+  var floor = r.tier ? S.cfg.floors[r.tier] : null, b = PB.band(a, floor, cfg); if (!b) return '';
+  var cal = PB.calibration(cfg);
+  return '<h4>Payback band <span class="pb-tag">Illustrative scenario, not a forecast</span></h4>' +
+    '<div class="pb"><div><small>Best</small><b>' + mo(b.best) + '</b></div><div class="base"><small>Base</small><b>' + mo(b.base) + '</b></div><div><small>Worst</small><b>' + mo(b.worst) + '</b></div></div>' +
+    '<p class="muted sm">To recover Rs ' + b.invest + ' lakh (' + (cfg.invest === 'applicant' ? 'the applicant\'s stated investment' : 'the minimum store investment for a ' + esc(r.tier) + ' city') + ') at Rs ' + cfg.sales.best + ' / ' + cfg.sales.base + ' / ' + cfg.sales.worst + ' lakh monthly sales, ' + Math.round(cfg.margin * 100) + '% gross margin and Rs ' + cfg.running + ' lakh monthly running costs.</p>' +
+    '<details class="pb-a"><summary>Change the payback inputs (apply to every applicant)</summary>' +
+      '<p class="muted sm">There is no brand data for these. The placeholders were set so that a Rs 25 to 35 lakh store pays back in 12 to 18 months in the base case, the range publicly quoted for a Lenskart-type store (an unofficial, third-party figure). With the current inputs that is ' + mo(cal.low) + ' to ' + mo(cal.high) + '.</p>' +
+      '<div class="pb-grid">' + inp('sales.best', cfg.sales.best, 'Monthly sales, best', 'Rs lakh') + inp('sales.base', cfg.sales.base, 'Monthly sales, base', 'Rs lakh') + inp('sales.worst', cfg.sales.worst, 'Monthly sales, worst', 'Rs lakh') +
+      inp('margin', Math.round(cfg.margin * 100), 'Gross margin', '%') + inp('running', cfg.running, 'Monthly running costs', 'Rs lakh') +
+      '<label class="pb-in"><span>Investment to recover</span><select data-pb="invest"><option value="floor"' + (cfg.invest === 'floor' ? ' selected' : '') + '>Store cost for the tier</option><option value="applicant"' + (cfg.invest === 'applicant' ? ' selected' : '') + '>Applicant\'s stated figure</option></select></label></div></details>';
+});
+
+document.addEventListener('change', function (e) {
+  var k = e.target.getAttribute && e.target.getAttribute('data-pb'); if (!k) return;
+  if (k === 'invest') cfg.invest = e.target.value;
+  else {
+    var v = parseFloat(e.target.value); if (isNaN(v) || v < 0) return;
+    if (k === 'margin') v = Math.min(100, v) / 100;
+    var p = k.split('.'), o = cfg; for (var i = 0; i < p.length - 1; i++) o = o[p[i]]; o[p[p.length - 1]] = v;
+  }
+  D.rerender();
+  var d = document.querySelector('.pb-a'); if (d) d.open = true;
+});
+
+var css = document.createElement('style');
+css.textContent = '.pb { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 4px 0 6px; } .pb > div { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--surface2); }' +
+  ' .pb > div.base { border-color: var(--accent); } .pb small { display: block; font-size: 12px; color: var(--muted); } .pb b { font-family: var(--display); font-size: 17px; }' +
+  ' .pb-tag { font-family: var(--body); font-size: 11.5px; font-weight: 600; color: var(--hold); border: 1px solid var(--hold); border-radius: 4px; padding: 0 6px; margin-left: 6px; vertical-align: 2px; }' +
+  ' .pb-a summary { cursor: pointer; font-size: 13px; color: var(--accent); } .pb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; margin-top: 6px; }' +
+  ' .pb-in { display: grid; grid-template-columns: 1fr 72px; gap: 0 8px; align-items: center; font-size: 13px; } .pb-in input, .pb-in select { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; background: var(--surface); } .pb-in select { grid-column: 2; width: auto; min-width: 72px; } .pb-in small { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; }';
 document.head.appendChild(css);
 })();
 
@@ -3827,7 +4041,7 @@ window.DeskExt.afterDetail.push(function (a, r) {
   var h = '<h4>' + (r.outcome === 'Approve' ? 'Recommended search zone' : 'Where to look for a shop') + '</h4>';
   if (!x.ok) return h + '<p class="muted sm">' + esc(x.why) + '</p>' + fallback();
   var t = x.top[0];
-  return h + '<p>Best hexagon in pin ' + esc(a.pin) + ': around ' + esc(t.landmarks[0] ? 'near ' + t.landmarks[0] : t.lat.toFixed(4) + ', ' + t.lon.toFixed(4)) + ' (crowd potential ' + Math.round(t.potential) + ', ' + Math.round(100 * t.overlap) + '% overlap with existing catchments).</p>' +
+  return h + '<p>Best hexagon in pin ' + esc(a.pin) + ': ' + esc(t.landmarks[0] ? 'near ' + t.landmarks[0] : 'around ' + t.lat.toFixed(4) + ', ' + t.lon.toFixed(4)) + ' (crowd potential ' + Math.round(t.potential) + ', ' + Math.round(100 * t.overlap) + '% overlap with existing catchments).</p>' +
     '<p><button class="btn sm" data-act="geo-app" data-v="' + esc(a.id) + '">Open in Site finder</button></p>';
 });
 window.DeskExt.boardTerritory.push(function (t) {

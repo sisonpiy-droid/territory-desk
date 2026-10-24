@@ -2,7 +2,7 @@
 // Logic lives in engine.js (overrides in allocation), src/modules/plan.js and src/modules/triggers.js.
 (function () {
 'use strict';
-var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, P = window.DeskPlan, TR = window.DeskTriggers;
+var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, P = window.DeskPlan, TR = window.DeskTriggers, GL = window.DeskGoLive;
 var OUTS = ['Approve', 'Waitlist', 'Hold', 'Reject'];
 S.log = []; S.stages = {};
 
@@ -15,7 +15,7 @@ function log(e) { e.at = new Date(); S.log.push(e); }
 /* ---------- decision log: every decision, override, what-if and change ---------- */
 window.DeskExt.afterRecompute.push(function (diff, first, cause) {
   if (first) {
-    S.log = []; S.stages = {}; S.loadedAt = new Date();
+    S.log = []; S.stages = {}; S.gates = {}; S.loadedAt = new Date();
     var n = S.apps.filter(function (a) { return !a.withdrawn; }).length;
     log({ kind: 'Upload', text: 'Decided ' + n + ' applications' + (S.label ? ' from ' + S.label : '') });
     S.apps.forEach(function (a) { var r = S.run.res[a.id]; if (r) log({ kind: 'Decision', id: a.id, to: r.outcome, text: short(a.id) }); });
@@ -83,9 +83,9 @@ function onboardHtml() {
       return '<div class="card-s' + (p.atRisk ? ' risk' : '') + '"><div class="cs-h">' + appLink(p.id) + ' <span>' + esc(a.name) + '</span></div>' +
         '<small>' + esc(a.city) + ', ' + esc(a.pin) + ' · opens ' + fmt(p.open) + '</small>' +
         (p.next ? '<p>' + esc(p.next.title) + '<br><span class="muted">' + esc(p.next.owner) + ', due ' + fmt(p.next.due) + (p.next.overdue ? ' (overdue)' : '') + '</span></p>' : '<p>Open</p>') +
-        (p.atRisk ? '<p class="risk">' + esc(p.risks.join('; ')) + '</p>' : '') +
+        (p.atRisk ? '<p class="risk">' + esc(p.risks.join('; ')) + '</p>' : '') + gateBadge(p) +
         '<div class="cs-b"><button class="btn sm" data-act="stage" data-id="' + esc(p.id) + '" data-v="-1"' + (i ? '' : ' disabled') + ' aria-label="Move back">‹</button>' +
-        '<button class="btn sm" data-act="stage" data-id="' + esc(p.id) + '" data-v="1"' + (i < P.STAGES.length - 1 ? '' : ' disabled') + '>Mark ' + esc((P.STAGES[i + 1] || 'done').toLowerCase()) + ' ›</button></div></div>';
+        '<button class="btn sm" data-act="stage" data-id="' + esc(p.id) + '" data-v="1"' + (i < P.STAGES.length - 1 && !(i === P.STAGES.length - 2 && !gateState(p).ready) ? '' : ' disabled title="Every go-live gate must be green first"') + '>Mark ' + esc((P.STAGES[i + 1] || 'done').toLowerCase()) + ' ›</button></div></div>';
     }).join('');
     return '<section class="col"><h4>' + esc(st) + ' <span class="muted">' + ps.filter(function (p) { return p.stage === i; }).length + '</span></h4>' + cards + '</section>';
   }).join('');
@@ -101,8 +101,28 @@ function onboardHtml() {
       '</tbody></table></details>';
   }).join('');
   return '<div class="onb"><p class="lede sm">' + ps.length + ' approved partner' + (ps.length === 1 ? '' : 's') + ', ' + risk + ' at risk. Each plan runs back from the target launch to the latest date the agreement can be signed; every step has an owner and a due date.</p>' +
-    '<div class="sboard">' + cols + '</div><h4 class="mt">Due in the next 14 days, by owner</h4><div class="owners">' + owners + '</div>' +
+    '<div class="sboard">' + cols + '</div>' + gatesHtml(ps) + '<h4 class="mt">Due in the next 14 days, by owner</h4><div class="owners">' + owners + '</div>' +
     '<h4 class="mt">Plans</h4>' + plans + '</div>';
+}
+
+/* ---------- go-live gates (src/modules/golive.js) ---------- */
+function gateState(p) { return GL ? GL.gates(p.open, (S.gates || {})[p.id], new Date()) : { ready: true, done: 0, total: 0, list: [] }; }
+function gateBadge(p) {
+  if (!GL) return '';
+  var g = gateState(p);
+  return '<div class="gbar' + (g.ready ? ' ok' : g.overdue ? ' late' : '') + '" title="Go-live gates: ' + g.done + ' of ' + g.total + ' green"><i style="width:' + Math.round(100 * g.readiness) + '%"></i></div>' +
+    '<small>Go-live ' + Math.round(100 * g.readiness) + '% (' + g.done + ' of ' + g.total + ')' + (g.overdue ? ', ' + g.overdue + ' overdue' : '') + '</small>';
+}
+function gatesHtml(ps) {
+  if (!GL) return '';
+  var head = GL.GATES.map(function (g) { return '<th title="' + esc(g.title) + '">' + esc(g.short) + '<br><small class="muted">' + esc(g.owner) + '</small></th>'; }).join('');
+  var rows = ps.map(function (p) {
+    var g = gateState(p), a = D.getApp(p.id);
+    return '<tr><td>' + appLink(p.id) + ' ' + esc(a.name) + '<br><small class="muted">' + Math.round(100 * g.readiness) + '% ready' + (g.ready ? '' : ', next: ' + esc(g.next.title.toLowerCase()) + ' by ' + fmt(g.next.due)) + '</small></td>' +
+      g.list.map(function (x) { return '<td class="' + (x.done ? 'g-ok' : x.overdue ? 'g-late' : '') + '"><label><input type="checkbox" data-act="gate" data-id="' + esc(p.id) + '" data-v="' + x.key + '"' + (x.done ? ' checked' : '') + '> ' + fmt(x.due).replace(/ \d{4}$/, '') + '</label></td>'; }).join('') + '</tr>';
+  }).join('');
+  return '<h4 class="mt">Go-live gates</h4><p class="muted sm">A store can be marked open only when every gate is green. Due dates count back from the planned opening; tick a gate when it is done.</p>' +
+    '<div class="tscroll"><table class="cmp gates"><thead><tr><th>Partner</th>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
 /* ---------- Decision log tab ---------- */
@@ -160,8 +180,14 @@ function fromChat(id, to, why) { var html = setOverride(id, to, why); S.askLog.p
 
 /* ---------- events ---------- */
 document.addEventListener('click', function (e) {
-  var el = e.target.closest && e.target.closest('[data-act="ovr-set"],[data-act="ovr-clear"],[data-act="stage"]'); if (!el) return;
+  var el = e.target.closest && e.target.closest('[data-act="ovr-set"],[data-act="ovr-clear"],[data-act="stage"],[data-act="gate"]'); if (!el) return;
   var act = el.getAttribute('data-act'), id = el.getAttribute('data-id');
+  if (act === 'gate') {
+    var k = el.getAttribute('data-v'); S.gates[id] = S.gates[id] || {}; S.gates[id][k] = el.checked;
+    var gt = GL.GATES.filter(function (g) { return g.key === k; })[0];
+    log({ kind: 'Go-live gate', id: id, text: gt.title + (el.checked ? ': green' : ': not done') });
+    D.rerender(); return;
+  }
   if (act === 'ovr-clear') setOverride(id, null, '');
   else if (act === 'ovr-set') {
     var to = document.querySelector('[data-ovr-to="' + id + '"]').value, why = document.querySelector('[data-ovr-why="' + id + '"]').value.trim();
@@ -169,6 +195,8 @@ document.addEventListener('click', function (e) {
     setOverride(id, to, why);
   } else if (act === 'stage') {
     var cur = S.stages[id] || 0, nx = Math.max(0, Math.min(P.STAGES.length - 1, cur + parseInt(el.getAttribute('data-v'), 10)));
+    var pl = P.plans(S, new Date()).filter(function (x) { return x.id === id; })[0];
+    if (P.STAGES[nx] === 'Open' && pl && !gateState(pl).ready) { S.askLog.push({ who: 'desk', html: '<p>' + esc(id) + ' cannot be marked open yet: ' + gateState(pl).list.filter(function (g) { return !g.done; }).map(function (g) { return esc(g.title.toLowerCase()); }).join('; ') + '.</p>' }); D.rerender(); return; }
     S.stages[id] = nx; log({ kind: 'Stage', id: id, text: 'Moved to ' + P.STAGES[nx] });
     D.rerender();
   }
@@ -205,6 +233,8 @@ css.textContent = [
   '.cmp.lg td { text-align: left; vertical-align: top; } .cmp.lg td:nth-child(-n+3) { white-space: nowrap; }',
   '.kind { font-size: 12px; font-weight: 600; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; white-space: nowrap; }',
   '.kind.k-override { color: var(--accent); border-color: var(--accent); } .kind.k-what-if { color: var(--wait); border-color: var(--wait); }',
+  '.gbar { height: 5px; border-radius: 3px; background: var(--surface2); border: 1px solid var(--line); margin-top: 6px; overflow: hidden; } .gbar i { display: block; height: 100%; background: var(--accent); } .gbar.ok i { background: var(--ok); } .gbar.late i { background: var(--no); }',
+  '.gates td, .gates th { text-align: left; vertical-align: top; white-space: nowrap; font-size: 12.5px; } .gates td:first-child { white-space: normal; min-width: 150px; } .gates .g-ok { color: var(--ok); } .gates .g-late { color: var(--no); font-weight: 600; }',
   '@media (max-width: 1060px) { .owners { grid-template-columns: repeat(2, minmax(0, 1fr)); } }',
   '@media (max-width: 720px) { .owners { grid-template-columns: minmax(0, 1fr); } .sboard { grid-template-columns: repeat(7, 78vw); } }'
 ].join('\n');

@@ -27,3 +27,23 @@ assert.strictEqual(p.rows.find(r => r.id === 'TER-01').needed, 0);
 const p2 = P.plan(S, Object.assign({}, P.DEFAULTS, { holdClear: 1 }));
 assert.strictEqual(p2.rows.find(r => r.id === 'TER-05').needed, 0);
 console.log('  ok   catchment overlap per applicant, pipeline planner');
+
+// go-live gate: due dates count back from opening; never ready until every gate is green
+const GL = require('../src/modules/golive.js');
+const open = new Date('2027-01-31T00:00:00');
+const g0 = GL.gates(open, {}, new Date('2026-10-25'));
+assert.strictEqual(g0.total, 7); assert(!g0.ready); assert.strictEqual(g0.readiness, 0);
+assert.strictEqual((open - g0.list.find(x => x.key === 'shop').due) / 86400000, 28);
+const all = {}; GL.GATES.forEach(x => { all[x.key] = true; });
+assert(GL.gates(open, all, new Date('2026-10-25')).ready);
+const six = Object.assign({}, all, { pos: false }); assert(!GL.gates(open, six).ready);
+assert(GL.gates(open, {}, new Date('2027-01-30')).overdue > 0);
+
+// payback: calibrated so a Rs 25 to 35 lakh store pays back in 12 to 18 months in the base case
+const PB = require('../src/modules/payback.js'), cal = PB.calibration();
+assert(cal.low >= 12 && cal.high <= 18, JSON.stringify(cal));
+const band = PB.band({ invest: 40 }, 30);
+assert(band.best < band.base && band.base < band.worst && band.invest === 30);
+assert.strictEqual(PB.band({ invest: 40 }, 30, Object.assign({}, PB.DEFAULTS, { invest: 'applicant' })).invest, 40);
+assert.strictEqual(PB.months(30, 1, PB.DEFAULTS), null, 'never pays back when sales do not cover costs');
+console.log('  ok   go-live gates, payback band');

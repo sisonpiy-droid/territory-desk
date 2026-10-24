@@ -133,7 +133,7 @@ window.DeskExt.afterDetail.push(function (a, r) {
   var h = '<h4>' + (r.outcome === 'Approve' ? 'Recommended search zone' : 'Where to look for a shop') + '</h4>';
   if (!x.ok) return h + '<p class="muted sm">' + esc(x.why) + '</p>' + fallback();
   var t = x.top[0];
-  return h + '<p>Best hexagon in pin ' + esc(a.pin) + ': around ' + esc(t.landmarks[0] ? 'near ' + t.landmarks[0] : t.lat.toFixed(4) + ', ' + t.lon.toFixed(4)) + ' (crowd potential ' + Math.round(t.potential) + ', ' + Math.round(100 * t.overlap) + '% overlap with existing catchments).</p>' +
+  return h + '<p>Best hexagon in pin ' + esc(a.pin) + ': ' + esc(t.landmarks[0] ? 'near ' + t.landmarks[0] : 'around ' + t.lat.toFixed(4) + ', ' + t.lon.toFixed(4)) + ' (crowd potential ' + Math.round(t.potential) + ', ' + Math.round(100 * t.overlap) + '% overlap with existing catchments).</p>' +
     '<p><button class="btn sm" data-act="geo-app" data-v="' + esc(a.id) + '">Open in Site finder</button></p>';
 });
 window.DeskExt.boardTerritory.push(function (t) {
