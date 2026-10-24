@@ -6,9 +6,15 @@ var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, W = window.
 var LBL = { high: 'High', medium: 'Medium', low: 'Low' };
 var cache = { run: null };
 var V = { changes: [] };
+var FRAG_LIMIT = 300;
 
 function calc() {
-  if (cache.run !== S.run) { cache.run = S.run; cache.frag = W.fragile(S); cache.conf = W.confidence(S, cache.frag); }
+  if (cache.run !== S.run) {
+    // ponytail: the 10% check re-runs every decision 20 times (about 5 s at 500 applications), so it is skipped on big files; move to a web worker if big files matter
+    var n = S.apps.filter(function (a) { return !a.withdrawn; }).length;
+    cache.run = S.run; cache.skipped = n > FRAG_LIMIT;
+    cache.frag = cache.skipped ? {} : W.fragile(S); cache.conf = W.confidence(S, cache.frag);
+  }
   return cache;
 }
 function appLink(id) { return '<button class="link" data-act="open-app" data-v="' + esc(id) + '">' + esc(id) + '</button>'; }
@@ -65,7 +71,7 @@ function scenHtml() {
     return '<li>' + appLink(id) + ' ' + esc(a.name) + ' ' + pill(S.run.res[id].outcome, true) + '<ul>' + c.frag[id].map(function (f) {
       return '<li>Becomes ' + pill(f.now, true) + ' if ' + esc(f.label.charAt(0).toLowerCase() + f.label.slice(1)) + ' ' + (f.up ? 'rises' : 'falls') + ' from ' + esc(f.from) + ' to ' + esc(f.to) + '</li>';
     }).join('') + '</ul></li>';
-  }).join('') + '</ul>' : '<p class="muted">No decision changes when any one threshold moves 10% either way.</p>';
+  }).join('') + '</ul>' : c.skipped ? '<p class="muted">This file has more than ' + FRAG_LIMIT + ' applications, so the 10% check is switched off to keep the page quick. Confidence uses the margin to the next rival and data flags only.</p>' : '<p class="muted">No decision changes when any one threshold moves 10% either way.</p>';
 
   var opts = options();
   var rows = V.changes.map(function (ch, i) {

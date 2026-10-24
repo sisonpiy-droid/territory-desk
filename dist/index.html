@@ -678,11 +678,12 @@ function cmp(A, B) {
   return ((B.forced ? 1 : 0) - (A.forced ? 1 : 0)) || (B.ev.score - A.ev.score) || ((B.a.exp || 0) - (A.a.exp || 0)) || ((B.a.invest || 0) - (A.a.invest || 0)) || (A.a.id < B.a.id ? -1 : 1);
 }
 
-function core(apps, territories, stores, cfg) {
+// reuse (optional): { evals, except } evaluations from a run on the same data, valid for every applicant but `except`
+function core(apps, territories, stores, cfg, reuse) {
   var live = apps.filter(function (a) { return !a.withdrawn; });
   var ctx = buildContext(territories, stores, cfg, live);
   var evals = {}, res = {};
-  live.forEach(function (a) { evals[a.id] = evaluateApp(a, ctx); });
+  live.forEach(function (a) { evals[a.id] = reuse && a.id !== reuse.except && reuse.evals[a.id] ? reuse.evals[a.id] : evaluateApp(a, ctx); });
 
   // Human overrides (a.override = { to, reason, at }), oldest first. An approval override goes first in allocation,
   // but is refused if it would put a store on a pin with a store, outside every territory, on a pin another
@@ -731,6 +732,7 @@ function core(apps, territories, stores, cfg) {
     if (x.rankPin > 1) outcome[x.a.id] = { o: 'Waitlist', reason: 'pin_lost', winner: x.pinGroup[0].a.id };
   });
 
+  var readyById = {}; ready.forEach(function (x) { readyById[x.a.id] = x; });
   var approvedByTer = {};
   Object.keys(outcome).forEach(function (id) { if (outcome[id].o === 'Approve') { var tid = evals[id].ter.id; approvedByTer[tid] = (approvedByTer[tid] || 0) + 1; } });
   var approvedPins = {};
@@ -750,7 +752,7 @@ function core(apps, territories, stores, cfg) {
     else if (ev.level === 'hold') r.outcome = 'Hold';
     else r.outcome = oc.o;
     if ((r.outcome === 'Approve' || r.outcome === 'Waitlist') && outcome[a.id]) {
-      var x = ready.filter(function (y) { return y.a.id === a.id; })[0];
+      var x = readyById[a.id];
       r.rankPin = x.rankPin; r.pinN = x.pinN; r.rankTer = x.rankTer || null; r.terN = x.terN || null;
       r.pinRivals = x.pinGroup.filter(function (y) { return y.a.id !== a.id; }).map(function (y) { return y.a.id; });
       if (oc.reason) { r.waitReason = oc.reason; r.winner = oc.winner || null; }
@@ -811,15 +813,17 @@ function simulateFixed(a, core0, apps, territories, stores, cfg) {
   });
   if (!possible || ev.issues.some(function (i) { return i.level === 'reject'; })) return { possible: false, why: why, fixes: fixes };
   var apps2 = apps.map(function (x) { return x.id === a.id ? b : x; });
-  var c2 = core(apps2, territories, stores, cfg), r2 = c2.res[a.id];
+  // only this applicant changes, so everyone else's evaluation is reused (name and pin are unchanged except a re-targeted pin, which only affects this applicant)
+  var c2 = core(apps2, territories, stores, cfg, { evals: core0.evals, except: a.id }), r2 = c2.res[a.id];
   return { possible: true, fixes: fixes, outcome: r2.outcome, rankPin: r2.rankPin, pinN: r2.pinN, score: r2.score, pin: b.pin,
            terId: r2.ter ? r2.ter.id : null, winner: r2.winner || null, beatenBy: r2.beatenBy || null, stillHold: r2.outcome === 'Hold' };
 }
 
 function run(apps, territories, stores, cfg) {
-  var c = core(apps, territories, stores, cfg);
+  var c = core(apps, territories, stores, cfg), byId = {};
+  apps.forEach(function (x) { byId[x.id] = x; });
   Object.keys(c.res).forEach(function (id) {
-    var r = c.res[id], a = apps.filter(function (x) { return x.id === id; })[0];
+    var r = c.res[id], a = byId[id];
     if (r.outcome === 'Hold') {
       r.ifFixed = simulateFixed(a, c, apps, territories, stores, cfg);
       var pinIssue = r.issues.filter(function (i) { return i.code === 'PIN_HAS_STORE' || i.code === 'PIN_OUTSIDE'; })[0];
@@ -1344,6 +1348,122 @@ function plans(S, now) {
 var api = { STAGES: STAGES, OWNERS: OWNERS, plan: plan, plans: plans };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.DeskPlan = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* modules\report.js */
+// Extras 4 and 6: every question the expansion team must ask applicants, and a short weekly summary for management.
+// Pure functions of the app state S; other modules (ops, plan, whatif) are used when loaded.
+(function (root) {
+'use strict';
+var E = root.Engine || require('../engine.js');
+
+/* ---------- questions to ask applicants ---------- */
+function q(i, a, r, S) {
+  var alt = (r.alternatives || []).map(function (p) { return p.pin; }).join(', ');
+  switch (i.code) {
+    case 'PIN_BAD': return 'What is the correct 6-digit pin code of the shop?';
+    case 'PIN_MISMATCH': return 'Pin ' + a.pin + ' does not match ' + a.city + '. Which is right, the pin code or the city?';
+    case 'CITY_UNKNOWN': return 'Which city is the shop in?';
+    case 'PIN_HAS_STORE': return 'We already have a store in pin ' + a.pin + '. Can you find a space in another pin code' + (alt ? ' (open: ' + alt + ')' : '') + '?';
+    case 'PIN_OUTSIDE': return 'Pin ' + a.pin + ' is outside our expansion areas. Can you find a space in one of them' + (alt ? ' (open: ' + alt + ')' : '') + '?';
+    case 'INVEST_MISSING': return 'How much can you invest in total, in Rs lakh?';
+    case 'INVEST_GAP': return 'Can you show Rs ' + i.need + ' lakh of funds, or bring in a co-investor? (you gave Rs ' + a.invest + ' lakh)';
+    case 'NO_SPACE': return 'Have you found a shop space? If so: owned or rented, size in sq ft, and which floor.';
+    case 'SIZE_MISSING': return 'What is the size of the space in sq ft?';
+    case 'SIZE_SMALL': return 'Your space is ' + a.size + ' sq ft. Can you find one of at least ' + S.cfg.minSpace + ' sq ft?';
+    case 'FLOOR_UPPER': return 'Is a ground-floor or mall space possible? Upper floors get too few customers.';
+    case 'NOTES_CONFLICT': return 'Your form says the space is "' + (a.spaceRaw || a.space) + '", but your notes say "' + a.notes + '". Which is right?';
+    case 'EXP_CONFLICT': return 'Please confirm your years of retail experience (the form says ' + a.exp + '; business: "' + a.biz + '").';
+    case 'LOAN': return 'Has the loan been sanctioned? Please share the sanction letter.';
+    case 'DUP_APPLICANT': return 'Is this your only application with us? Another application has the same name.';
+    case 'LAUNCH_SOON': return 'Your target is ' + a.launch + ' month(s); the earliest realistic opening is about ' + r.feasible.toFixed(1) + ' months. Does that work?';
+    case 'LANG_MISSING': return 'Which language would you like for training: Kannada, Hindi or English?';
+  }
+  return null;
+}
+function questions(S) {
+  var out = [];
+  S.apps.forEach(function (a) {
+    var r = S.run.res[a.id]; if (a.withdrawn || !r || r.outcome === 'Reject') return;
+    var list = [];
+    r.issues.forEach(function (i) { var t = q(i, a, r, S); if (t) list.push({ text: t, why: i.title, blocks: i.level === 'hold' }); });
+    if (r.outcome === 'Approve') {
+      if (a.sizeAssumed) list.push({ text: 'Please confirm the size of the space in sq ft (it must be at least ' + S.cfg.minSpace + ').', why: 'Condition of approval', blocks: false });
+      if (a.floor === 'Not known' && a.space !== 'Not yet identified') list.push({ text: 'Which floor is the space on?', why: 'Condition of approval', blocks: false });
+    }
+    list.sort(function (x, y) { return y.blocks - x.blocks; });
+    if (list.length) out.push({ id: a.id, name: a.name, city: a.city, lang: a.lang || 'English', outcome: r.outcome, items: list });
+  });
+  return out;
+}
+function questionRows(S) {
+  var rows = [['Application ID', 'Applicant', 'City', 'Decision now', 'Preferred language', '#', 'Question to ask', 'Why we ask', 'Holds up the decision']];
+  questions(S).forEach(function (g) {
+    g.items.forEach(function (it, k) { rows.push([k ? '' : g.id, k ? '' : g.name, k ? '' : g.city, k ? '' : g.outcome, k ? '' : g.lang, k + 1, it.text, it.why, it.blocks ? 'Yes' : 'No']); });
+    rows.push([]);
+  });
+  return rows;
+}
+
+/* ---------- weekly summary for management ---------- */
+function weekly(S, now, extra) {
+  extra = extra || {};
+  var res = S.run.res, live = S.apps.filter(function (a) { return !a.withdrawn && res[a.id]; });
+  var c = { Approve: 0, Waitlist: 0, Hold: 0, Reject: 0 };
+  live.forEach(function (a) { c[res[a.id].outcome]++; });
+  var slots = 0, filled = 0; S.ters.forEach(function (t) { slots += t.slots; filled += Math.min(t.slots, S.run.approvedByTer[t.id] || 0); });
+  var holdWhy = {}; live.forEach(function (a) { if (res[a.id].outcome === 'Hold') res[a.id].issues.forEach(function (i) { if (i.level === 'hold') holdWhy[i.title] = (holdWhy[i.title] || 0) + 1; }); });
+  var topHold = Object.keys(holdWhy).sort(function (x, y) { return holdWhy[y] - holdWhy[x]; }).slice(0, 3);
+  var pct = function (x, y) { return y ? Math.round(100 * x / y) + '%' : '–'; };
+  var d = new Date(now), wk = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  var s = [];
+
+  s.push({ h: 'This week', items: [
+    live.length + ' applications decided' + (S.apps.length > live.length ? ' (' + (S.apps.length - live.length) + ' withdrawn)' : '') + ': ' + c.Approve + ' approved, ' + c.Waitlist + ' waitlisted, ' + c.Hold + ' on hold, ' + c.Reject + ' not taken forward.',
+    filled + ' of ' + slots + ' territory slots filled (' + pct(filled, slots) + ').',
+    topHold.length ? 'Main reasons for holds: ' + topHold.map(function (k) { return k.toLowerCase() + ' (' + holdWhy[k] + ')'; }).join(', ') + '.' : 'No applications on hold.'
+  ] });
+
+  var dec = [], under = [];
+  if (extra.health) extra.health.forEach(function (t) {
+    t.flags.forEach(function (f) {
+      if (f.k === 'over') {
+        var wait = live.filter(function (a) { var r = res[a.id]; return r.outcome === 'Waitlist' && r.waitReason === 'territory_full' && r.ter && r.ter.id === t.id; });
+        if (wait.length) dec.push('Add a slot in ' + t.id + ' ' + t.city + '? ' + wait.map(function (a) { return a.id + ' (score ' + res[a.id].score + ')'; }).join(', ') + ' is eligible and waiting.');
+      }
+      if (f.k === 'under') {
+        var m = f.text.match(/\((.*) could, once fixed\)/);
+        under.push(t.id + ' ' + t.city + ' (' + t.open + (m ? '; ' + m[1] + ' could fill it once the hold is cleared' : '') + ')');
+      }
+    });
+  });
+  if (under.length) dec.push('Open slots with no eligible applicant on a free pin, so local outreach is needed: ' + under.join(', ') + '.');
+  if (dec.length) s.push({ h: 'Decisions for management', items: dec });
+
+  var watch = [];
+  if (extra.plans) { var risk = extra.plans.filter(function (p) { return p.atRisk; }); if (risk.length) watch.push(risk.length + ' of ' + extra.plans.length + ' approved partners are at risk on their launch date: ' + risk.map(function (p) { return p.id + ' (' + p.risks[0].toLowerCase() + ')'; }).join('; ') + '.'); }
+  if (extra.fragile) { var fr = Object.keys(extra.fragile); if (fr.length) watch.push(fr.length + ' decision' + (fr.length === 1 ? ' is' : 's are') + ' close to a threshold and would flip if it moved 10%: ' + fr.join(', ') + '. These get a second look before signing.'); }
+  var ovr = live.filter(function (a) { return res[a.id].override && res[a.id].override.applied; });
+  if (ovr.length) watch.push(ovr.length + ' decision' + (ovr.length === 1 ? ' was' : 's were') + ' overridden by the team: ' + ovr.map(function (a) { return a.id + ' (' + res[a.id].override.reason + ')'; }).join('; ') + '.');
+  if (watch.length) s.push({ h: 'Watch', items: watch });
+
+  var eff = [];
+  if (extra.ba) eff.push('About ' + Math.round(extra.ba.savedHours * 10) / 10 + ' hours of screening saved on this file (' + Math.round(extra.ba.manualHours * 10) / 10 + ' by hand against ' + Math.round(extra.ba.deskHours * 10) / 10 + ' with the desk, using the minutes set on the Before and after panel).');
+  if (extra.questions) eff.push(extra.questions + ' applicant' + (extra.questions === 1 ? '' : 's') + ' to contact for missing or contradictory details; the questions are drafted.');
+  if (extra.log && (extra.log.overrides || extra.log.changes)) eff.push(extra.log.overrides + ' override' + (extra.log.overrides === 1 ? '' : 's') + ' and ' + extra.log.changes + ' update' + (extra.log.changes === 1 ? '' : 's') + ' from new information recorded in the decision log.');
+  if (eff.length) s.push({ h: 'Team effort', items: eff });
+
+  return { title: 'Franchise expansion: week of ' + wk, sections: s };
+}
+function asText(rep) {
+  return rep.title + '\n\n' + rep.sections.map(function (s) { return s.h + '\n' + s.items.map(function (i) { return '- ' + i; }).join('\n'); }).join('\n\n');
+}
+
+var api = { questions: questions, questionRows: questionRows, weekly: weekly, asText: asText };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.DeskReport = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -2332,9 +2452,15 @@ var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, W = window.
 var LBL = { high: 'High', medium: 'Medium', low: 'Low' };
 var cache = { run: null };
 var V = { changes: [] };
+var FRAG_LIMIT = 300;
 
 function calc() {
-  if (cache.run !== S.run) { cache.run = S.run; cache.frag = W.fragile(S); cache.conf = W.confidence(S, cache.frag); }
+  if (cache.run !== S.run) {
+    // ponytail: the 10% check re-runs every decision 20 times (about 5 s at 500 applications), so it is skipped on big files; move to a web worker if big files matter
+    var n = S.apps.filter(function (a) { return !a.withdrawn; }).length;
+    cache.run = S.run; cache.skipped = n > FRAG_LIMIT;
+    cache.frag = cache.skipped ? {} : W.fragile(S); cache.conf = W.confidence(S, cache.frag);
+  }
   return cache;
 }
 function appLink(id) { return '<button class="link" data-act="open-app" data-v="' + esc(id) + '">' + esc(id) + '</button>'; }
@@ -2391,7 +2517,7 @@ function scenHtml() {
     return '<li>' + appLink(id) + ' ' + esc(a.name) + ' ' + pill(S.run.res[id].outcome, true) + '<ul>' + c.frag[id].map(function (f) {
       return '<li>Becomes ' + pill(f.now, true) + ' if ' + esc(f.label.charAt(0).toLowerCase() + f.label.slice(1)) + ' ' + (f.up ? 'rises' : 'falls') + ' from ' + esc(f.from) + ' to ' + esc(f.to) + '</li>';
     }).join('') + '</ul></li>';
-  }).join('') + '</ul>' : '<p class="muted">No decision changes when any one threshold moves 10% either way.</p>';
+  }).join('') + '</ul>' : c.skipped ? '<p class="muted">This file has more than ' + FRAG_LIMIT + ' applications, so the 10% check is switched off to keep the page quick. Confidence uses the margin to the next rival and data flags only.</p>' : '<p class="muted">No decision changes when any one threshold moves 10% either way.</p>';
 
   var opts = options();
   var rows = V.changes.map(function (ch, i) {
@@ -3040,6 +3166,151 @@ css.textContent = [
   '  .leak { border-top: 0; border-left: 2px dashed color-mix(in srgb, var(--hold) 55%, transparent); padding: 2px 0 2px 12px; margin-left: 14px; display: flex; gap: 10px; align-items: flex-start; }',
   '  .leak.none { border-left-color: var(--line); } .leak ul { margin: 0; }',
   '  .ba-out { grid-template-columns: minmax(0, 1fr); } .ba-out.ad { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ba-grid { grid-template-columns: minmax(0, 1fr); }',
+  '}'
+].join('\n');
+document.head.appendChild(css);
+})();
+
+</script>
+<script>
+/* ext\reports.js */
+// Reports tab: the question list for applicants (download), one-page decision memos (print), and the weekly summary.
+// Logic in src/modules/report.js; memos also reuse the plan, trigger and confidence modules.
+(function () {
+'use strict';
+var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, R = window.DeskReport;
+var O = window.DeskOps, P = window.DeskPlan, TR = window.DeskTriggers, W = window.DeskWhatIf;
+var LBL = { high: 'High', medium: 'Medium', low: 'Low' };
+
+function fmt(d) { return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }); }
+function appLink(id) { return '<button class="link" data-act="open-app" data-v="' + esc(id) + '">' + esc(id) + '</button>'; }
+function langAttr(l) { return l === 'Hindi' ? 'hi' : l === 'Kannada' ? 'kn' : 'en'; }
+
+/* ---------- weekly summary ---------- */
+function weeklyReport() {
+  var now = new Date(), log = S.log || [];
+  return R.weekly(S, now, {
+    health: O && O.territoryHealth(S), plans: P && P.plans(S, now), fragile: W && W.fragile(S),
+    ba: O && O.beforeAfter(S, O.DEFAULT_TIME), questions: R.questions(S).length,
+    log: { overrides: log.filter(function (e) { return e.kind === 'Override'; }).length, changes: log.filter(function (e) { return e.kind === 'New information' || e.kind === 'What-if'; }).length }
+  });
+}
+function weeklyHtml(rep) {
+  return '<h2 class="wk-t">' + esc(rep.title) + '</h2>' + rep.sections.map(function (s) {
+    return '<h4>' + esc(s.h) + '</h4><ul>' + s.items.map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>';
+  }).join('');
+}
+
+/* ---------- decision memo ---------- */
+function memoHtml(id, conf) {
+  var a = D.getApp(id), r = S.run.res[id]; if (!a || !r) return '';
+  var x = E.explain(r, a, { cfg: S.cfg, run: S.run }), c = conf && conf[id];
+  var lang = a.lang || 'English', scored = r.outcome === 'Approve' || r.outcome === 'Waitlist';
+  var facts = [['City and pin', a.city + ', ' + a.pin], ['Territory', r.ter ? r.ter.id + ' (' + r.ter.tier + ', ' + r.ter.priority + ' priority)' : 'none'],
+    ['Score', (scored ? r.score + ' of 100' : 'not ranked (' + r.score + ' indicative)') + (r.override && r.override.applied ? '; decided by override' : '')],
+    ['Confidence', c ? LBL[c.level] + ': ' + c.why.join('; ') : '–'], ['Investment', a.invest == null ? 'not given' : 'Rs ' + a.invest + ' lakh'],
+    ['Space', a.space + (a.size != null ? ', ' + a.size + ' sq ft' : '') + ', ' + a.floor.toLowerCase()], ['Experience', a.exp == null ? 'not given' : a.exp + ' years; ' + (a.biz || 'business not given')]];
+  var next = '';
+  if (r.outcome === 'Approve' && P) {
+    var p = P.plan(a, r, S.cfg, S.loadedAt || new Date(), (S.stages || {})[id] || 0, new Date());
+    next = '<p>Sign by <b>' + fmt(p.latestSign) + '</b> to open on <b>' + fmt(p.open) + '</b>. ' + esc(p.basis) + (p.atRisk ? ' <b>At risk:</b> ' + esc(p.risks.join('; ')) + '.' : '') + '</p>' +
+      '<table><thead><tr><th>Step</th><th>Owner</th><th>Due</th></tr></thead><tbody>' + p.steps.map(function (s) { return '<tr><td>' + esc(s.title) + '</td><td>' + esc(s.owner) + '</td><td>' + fmt(s.due) + '</td></tr>'; }).join('') + '</tbody></table>' +
+      (r.conditions.length ? '<p><b>Conditions to clear before signing:</b> ' + esc(r.conditions.join('; ')) + '.</p>' : '');
+  } else {
+    var t = TR && TR.triggers(S)[id];
+    next = (x.next.length ? '<ul>' + x.next.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>' : '') +
+      (t && t.events.length ? '<p><b>Decide again when:</b> ' + esc(t.events.join('; or ')) + (t.then ? '. Then: ' + esc(t.then) : '') + '.</p>' : '');
+  }
+  var qs = R.questions(S).filter(function (g) { return g.id === id; })[0];
+  var msg = E.letter(r, a, lang, S.cfg), en = lang === 'English' ? '' : E.letter(r, a, 'English', S.cfg);
+  return '<article class="memo"><header><span>Territory Desk · Decision memo</span><span>' + fmt(new Date()) + '</span></header>' +
+    '<h1>' + esc(a.id) + ' ' + esc(a.name) + ' <span class="pill ' + { Approve: 'ok', Waitlist: 'wait', Hold: 'hold', Reject: 'no' }[r.outcome] + '">' + esc(r.outcome) + '</span></h1>' +
+    '<p class="lead">' + esc(x.headline) + '.</p>' +
+    '<dl>' + facts.map(function (f) { return '<dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd>'; }).join('') + '</dl>' +
+    '<h3>Why</h3>' + x.lines.filter(function (l) { return !/^(Conditions to clear|Score [\d.]+ out of 100)/.test(l); }).map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') +
+    (scored ? '<p class="parts"><b>Score:</b> ' + Object.keys(r.parts).map(function (k) { var pt = r.parts[k]; return esc(pt.label) + ' ' + (Math.round(pt.pts * 10) / 10) + '/' + pt.max + ' <span>(' + esc(pt.note) + ')</span>'; }).join(' · ') + '</p>' : '') +
+    '<h3>' + (r.outcome === 'Approve' ? 'Onboarding plan' : 'Next steps') + '</h3>' + next +
+    (qs ? '<h3>Questions to ask the applicant</h3><ol>' + qs.items.map(function (i) { return '<li>' + esc(i.text) + (i.blocks ? ' <b>(holds up the decision)</b>' : '') + '</li>'; }).join('') + '</ol>' : '') +
+    '<h3>Message to the applicant (' + esc(lang) + ')</h3><p class="msg" lang="' + langAttr(lang) + '">' + esc(msg) + '</p>' + (en ? '<p class="msg en">' + esc(en) + '</p>' : '') +
+    '<footer>Reviewed by ____________________ &nbsp; Date ____________ &nbsp; Decision confirmed / changed (reason): ______________________________</footer></article>';
+}
+function printHtml(html) {
+  var box = document.getElementById('print-area');
+  if (!box) { box = document.createElement('div'); box.id = 'print-area'; document.body.appendChild(box); }
+  box.innerHTML = html;
+  setTimeout(function () { window.print(); }, 50);
+}
+function printMemos(ids) { var conf = W ? W.confidence(S) : null; printHtml(ids.map(function (id) { return memoHtml(id, conf); }).join('')); }
+window.addEventListener('afterprint', function () { var b = document.getElementById('print-area'); if (b) b.innerHTML = ''; });
+
+/* ---------- question list download ---------- */
+function downloadQuestions() {
+  var wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet(R.questionRows(S));
+  ws['!cols'] = [12, 18, 14, 11, 12, 4, 80, 34, 10].map(function (w) { return { wch: w }; });
+  XLSX.utils.book_append_sheet(wb, ws, 'Questions for applicants');
+  XLSX.writeFile(wb, 'applicant-questions.xlsx');
+}
+window.DeskExt.exportSheets.push(function () { return { name: 'Questions for applicants', rows: R.questionRows(S) }; });
+
+/* ---------- Reports tab ---------- */
+function reportsHtml() {
+  var qs = R.questions(S), nq = 0, nb = 0;
+  qs.forEach(function (g) { nq += g.items.length; g.items.forEach(function (i) { if (i.blocks) nb++; }); });
+  var ids = S.apps.filter(function (a) { return !a.withdrawn && S.run.res[a.id]; }).map(function (a) { return a.id; });
+  var rep = weeklyReport();
+  return '<div class="reps">' +
+    '<section class="rcard"><div class="rh"><div><h3>Questions for applicants</h3><p class="muted sm">' + nq + ' question' + (nq === 1 ? '' : 's') + ' for ' + qs.length + ' applicant' + (qs.length === 1 ? '' : 's') + '; ' + nb + ' hold up a decision. One sheet, grouped by applicant.</p></div>' +
+      '<button class="btn sm primary" data-act="rep-q">Download the list</button></div>' +
+      '<ul class="qlist">' + qs.map(function (g) { return '<li>' + appLink(g.id) + ' ' + esc(g.name) + ' ' + pill(g.outcome, true) + ' <span class="muted sm">' + esc(g.lang) + '</span><ol>' + g.items.map(function (i) { return '<li' + (i.blocks ? ' class="blk"' : '') + '>' + esc(i.text) + '</li>'; }).join('') + '</ol></li>'; }).join('') + '</ul></section>' +
+    '<section class="rcard"><div class="rh"><div><h3>Decision memos</h3><p class="muted sm">One printable page per applicant: decision, reason, score, next steps with owners and dates, questions, and the message in their language. Save as PDF from the print dialog.</p></div>' +
+      '<div class="rb"><select id="memo-one" aria-label="Applicant">' + ids.map(function (id) { return '<option>' + esc(id) + '</option>'; }).join('') + '</select><button class="btn sm" data-act="rep-memo1">Print this memo</button><button class="btn sm primary" data-act="rep-memos">Print all ' + ids.length + '</button></div></div></section>' +
+    '<section class="rcard"><div class="rh"><div><h3>Weekly summary for management</h3><p class="muted sm">Written from this file and the decision log. Copy it into an email or print it.</p></div>' +
+      '<div class="rb"><button class="btn sm" data-act="rep-copy">Copy as text</button><button class="btn sm" data-act="rep-print">Print</button></div></div>' +
+      '<div class="weekly">' + weeklyHtml(rep) + '</div></section></div>';
+}
+window.DeskExt.tabs.push({ id: 'reports', label: 'Reports', render: reportsHtml });
+
+window.DeskExt.afterDetail.push(function (a) { return '<p><button class="btn sm" data-act="rep-memo" data-id="' + esc(a.id) + '">Print decision memo</button></p>'; });
+
+document.addEventListener('click', function (e) {
+  var el = e.target.closest && e.target.closest('[data-act^="rep-"]'); if (!el) return;
+  var act = el.getAttribute('data-act');
+  if (act === 'rep-q') downloadQuestions();
+  else if (act === 'rep-memo') printMemos([el.getAttribute('data-id')]);
+  else if (act === 'rep-memo1') printMemos([document.getElementById('memo-one').value]);
+  else if (act === 'rep-memos') printMemos(S.apps.filter(function (a) { return !a.withdrawn && S.run.res[a.id]; }).map(function (a) { return a.id; }));
+  else if (act === 'rep-print') printHtml('<article class="memo">' + weeklyHtml(weeklyReport()) + '</article>');
+  else if (act === 'rep-copy') {
+    var txt = R.asText(weeklyReport()), label = el.textContent, done = function () { el.textContent = 'Copied'; setTimeout(function () { el.textContent = label; }, 1400); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, done); else done();
+  }
+});
+
+var css = document.createElement('style');
+css.textContent = [
+  '.reps { display: flex; flex-direction: column; gap: 12px; }',
+  '.rcard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }',
+  '.rh { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }',
+  '.rh h3 { font-family: var(--display); font-size: 16px; font-weight: 800; }',
+  '.rb { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; } .rb select { border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; background: var(--surface); }',
+  '.qlist { list-style: none; padding: 0; margin: 10px 0 0; max-height: 420px; overflow-y: auto; }',
+  '.qlist > li { padding: 7px 0; border-top: 1px dashed var(--line); font-size: 14px; } .qlist ol { margin: 4px 0 0; padding-left: 20px; color: var(--muted); font-size: 13.5px; } .qlist .blk { color: var(--ink); }',
+  '.weekly { margin-top: 10px; font-size: 14.5px; } .weekly .wk-t { font-family: var(--display); font-size: 18px; font-weight: 800; margin-bottom: 6px; }',
+  '.weekly h4 { font-family: var(--display); font-size: 14.5px; margin: 12px 0 4px; } .weekly ul { margin: 0; padding-left: 20px; } .weekly li { margin-bottom: 4px; }',
+  '#print-area { display: none; }',
+  '@media print {',
+  '  body > *:not(#print-area) { display: none !important; } #print-area { display: block; } body { background: #fff; color: #111; font-size: 9.5pt; line-height: 1.38; }',
+  '  .memo .parts span { color: #555; }',
+  '  .memo { page-break-after: always; break-after: page; padding: 0; } .memo:last-child { page-break-after: auto; break-after: auto; }',
+  '  .memo header { display: flex; justify-content: space-between; font-size: 9.5pt; color: #555; border-bottom: 1px solid #999; padding-bottom: 4px; margin-bottom: 10px; }',
+  '  .memo h1 { font-family: var(--display); font-size: 15pt; margin: 0 0 2px; } .memo h1 .pill { font-size: 9pt; vertical-align: middle; }',
+  '  .memo h2 { font-size: 14pt; } .memo h3, .memo h4 { font-size: 10.5pt; margin: 8px 0 3px; border-bottom: 1px solid #ddd; }',
+  '  .memo p, .memo li { margin: 0 0 2px; } .memo .lead { font-weight: 600; } .memo ul, .memo ol { margin: 2px 0; padding-left: 18px; }',
+  '  .memo dl { display: grid; grid-template-columns: 80px 1fr 80px 1fr; gap: 1px 10px; margin: 6px 0; } .memo dt { color: #555; } .memo dd { margin: 0; }',
+  '  .memo table { border-collapse: collapse; width: 100%; font-size: 9pt; } .memo td, .memo th { border-bottom: 1px solid #ddd; padding: 1px 6px; text-align: left; }',
+  "  .memo .msg { border: 1px solid #ccc; border-radius: 4px; padding: 5px 8px; } .memo .msg[lang=\"hi\"] { font-family: 'Noto Sans Devanagari', 'Nirmala UI', Mangal, sans-serif; } .memo .msg[lang=\"kn\"] { font-family: 'Noto Sans Kannada', 'Nirmala UI', Tunga, sans-serif; } .memo .msg.en { color: #555; font-size: 8.5pt; }",
+  '  .memo footer { margin-top: 10px; font-size: 9pt; color: #333; }',
+  '  @page { size: A4; margin: 14mm; }',
   '}'
 ].join('\n');
 document.head.appendChild(css);

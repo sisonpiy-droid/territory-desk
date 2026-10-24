@@ -430,11 +430,12 @@ function cmp(A, B) {
   return ((B.forced ? 1 : 0) - (A.forced ? 1 : 0)) || (B.ev.score - A.ev.score) || ((B.a.exp || 0) - (A.a.exp || 0)) || ((B.a.invest || 0) - (A.a.invest || 0)) || (A.a.id < B.a.id ? -1 : 1);
 }
 
-function core(apps, territories, stores, cfg) {
+// reuse (optional): { evals, except } evaluations from a run on the same data, valid for every applicant but `except`
+function core(apps, territories, stores, cfg, reuse) {
   var live = apps.filter(function (a) { return !a.withdrawn; });
   var ctx = buildContext(territories, stores, cfg, live);
   var evals = {}, res = {};
-  live.forEach(function (a) { evals[a.id] = evaluateApp(a, ctx); });
+  live.forEach(function (a) { evals[a.id] = reuse && a.id !== reuse.except && reuse.evals[a.id] ? reuse.evals[a.id] : evaluateApp(a, ctx); });
 
   // Human overrides (a.override = { to, reason, at }), oldest first. An approval override goes first in allocation,
   // but is refused if it would put a store on a pin with a store, outside every territory, on a pin another
@@ -483,6 +484,7 @@ function core(apps, territories, stores, cfg) {
     if (x.rankPin > 1) outcome[x.a.id] = { o: 'Waitlist', reason: 'pin_lost', winner: x.pinGroup[0].a.id };
   });
 
+  var readyById = {}; ready.forEach(function (x) { readyById[x.a.id] = x; });
   var approvedByTer = {};
   Object.keys(outcome).forEach(function (id) { if (outcome[id].o === 'Approve') { var tid = evals[id].ter.id; approvedByTer[tid] = (approvedByTer[tid] || 0) + 1; } });
   var approvedPins = {};
@@ -502,7 +504,7 @@ function core(apps, territories, stores, cfg) {
     else if (ev.level === 'hold') r.outcome = 'Hold';
     else r.outcome = oc.o;
     if ((r.outcome === 'Approve' || r.outcome === 'Waitlist') && outcome[a.id]) {
-      var x = ready.filter(function (y) { return y.a.id === a.id; })[0];
+      var x = readyById[a.id];
       r.rankPin = x.rankPin; r.pinN = x.pinN; r.rankTer = x.rankTer || null; r.terN = x.terN || null;
       r.pinRivals = x.pinGroup.filter(function (y) { return y.a.id !== a.id; }).map(function (y) { return y.a.id; });
       if (oc.reason) { r.waitReason = oc.reason; r.winner = oc.winner || null; }
@@ -563,15 +565,17 @@ function simulateFixed(a, core0, apps, territories, stores, cfg) {
   });
   if (!possible || ev.issues.some(function (i) { return i.level === 'reject'; })) return { possible: false, why: why, fixes: fixes };
   var apps2 = apps.map(function (x) { return x.id === a.id ? b : x; });
-  var c2 = core(apps2, territories, stores, cfg), r2 = c2.res[a.id];
+  // only this applicant changes, so everyone else's evaluation is reused (name and pin are unchanged except a re-targeted pin, which only affects this applicant)
+  var c2 = core(apps2, territories, stores, cfg, { evals: core0.evals, except: a.id }), r2 = c2.res[a.id];
   return { possible: true, fixes: fixes, outcome: r2.outcome, rankPin: r2.rankPin, pinN: r2.pinN, score: r2.score, pin: b.pin,
            terId: r2.ter ? r2.ter.id : null, winner: r2.winner || null, beatenBy: r2.beatenBy || null, stillHold: r2.outcome === 'Hold' };
 }
 
 function run(apps, territories, stores, cfg) {
-  var c = core(apps, territories, stores, cfg);
+  var c = core(apps, territories, stores, cfg), byId = {};
+  apps.forEach(function (x) { byId[x.id] = x; });
   Object.keys(c.res).forEach(function (id) {
-    var r = c.res[id], a = apps.filter(function (x) { return x.id === id; })[0];
+    var r = c.res[id], a = byId[id];
     if (r.outcome === 'Hold') {
       r.ifFixed = simulateFixed(a, c, apps, territories, stores, cfg);
       var pinIssue = r.issues.filter(function (i) { return i.code === 'PIN_HAS_STORE' || i.code === 'PIN_OUTSIDE'; })[0];
