@@ -3,11 +3,12 @@
   "private": true,
   "scripts": {
     "build": "node build.js",
-    "test": "node test/run.js && node test/ops.js && node test/phase2.js && node test/extras.js && node test/stress.js && node test/file.js && node test/ui-smoke.js && node test/phrasings.js",
-    "check": "node build.js && node test/run.js && node test/ops.js && node test/phase2.js && node test/extras.js && node test/stress.js && node test/file.js && node test/ui-smoke.js && node test/phrasings.js",
+    "test": "node test/run.js && node test/ops.js && node test/phase2.js && node test/extras.js && node test/report.js && node test/stress.js && node test/file.js && node test/ui-smoke.js && node test/phrasings.js",
+    "check": "node build.js && node test/run.js && node test/ops.js && node test/phase2.js && node test/extras.js && node test/report.js && node test/stress.js && node test/file.js && node test/ui-smoke.js && node test/phrasings.js",
     "e2e": "node test/e2e.js",
     "e2e:live": "node test/e2e.js https://territory-desk.vercel.app",
-    "stress": "node test/make-stress.js"
+    "stress": "node test/make-stress.js",
+    "bench": "node test/bench.js"
   },
   "devDependencies": {
     "jsdom": "^30.1.3",
