@@ -47,6 +47,7 @@ p { margin: 0 0 8px; }
 .brand small { font-family: var(--body); font-weight: 400; font-size: 13px; color: var(--muted); letter-spacing: 0; }
 .logo { width: 26px; height: 26px; }
 .top .actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.top .jump-ask { display: none; text-decoration: none; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 600; font-size: 14px; }
 .btn:hover { border-color: var(--accent); }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
@@ -204,6 +205,7 @@ button.tile:hover { transform: translateY(-1px); }
 @media (max-width: 1060px) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
   .ask { position: static; }
+  body:has(.workspace) .top .jump-ask { display: inline-flex; }
   .ask-in { max-height: none; }
   .log { max-height: 420px; }
   .detail { grid-template-columns: minmax(0, 1fr); gap: 0; }
@@ -217,6 +219,8 @@ button.tile:hover { transform: translateY(-1px); }
   .assume .a-grid { grid-template-columns: minmax(0, 1fr); }
   .w-grid { grid-template-columns: minmax(0, 1fr); }
   .top .actions { margin-left: 0; width: 100%; }
+  .tabs { flex-wrap: wrap; } .tabs .grow { display: none; }
+  .top { position: static; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } button.tile:hover { transform: none; } }
 </style>
@@ -228,6 +232,7 @@ button.tile:hover { transform: translateY(-1px); }
     Territory Desk <small>Franchise partner decisions</small>
   </div>
   <div class="actions">
+    <a class="btn jump-ask" href="#ask">Ask a question</a>
     <button class="btn" data-act="sample">Load sample data</button>
     <label class="btn primary">Upload workbook<input type="file" id="file" accept=".xlsx,.xls" hidden></label>
   </div>

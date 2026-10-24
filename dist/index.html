@@ -47,6 +47,7 @@ p { margin: 0 0 8px; }
 .brand small { font-family: var(--body); font-weight: 400; font-size: 13px; color: var(--muted); letter-spacing: 0; }
 .logo { width: 26px; height: 26px; }
 .top .actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.top .jump-ask { display: none; text-decoration: none; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 600; font-size: 14px; }
 .btn:hover { border-color: var(--accent); }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
@@ -204,6 +205,7 @@ button.tile:hover { transform: translateY(-1px); }
 @media (max-width: 1060px) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
   .ask { position: static; }
+  body:has(.workspace) .top .jump-ask { display: inline-flex; }
   .ask-in { max-height: none; }
   .log { max-height: 420px; }
   .detail { grid-template-columns: minmax(0, 1fr); gap: 0; }
@@ -217,6 +219,8 @@ button.tile:hover { transform: translateY(-1px); }
   .assume .a-grid { grid-template-columns: minmax(0, 1fr); }
   .w-grid { grid-template-columns: minmax(0, 1fr); }
   .top .actions { margin-left: 0; width: 100%; }
+  .tabs { flex-wrap: wrap; } .tabs .grow { display: none; }
+  .top { position: static; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } button.tile:hover { transform: none; } }
 </style>
@@ -228,6 +232,7 @@ button.tile:hover { transform: translateY(-1px); }
     Territory Desk <small>Franchise partner decisions</small>
   </div>
   <div class="actions">
+    <a class="btn jump-ask" href="#ask">Ask a question</a>
     <button class="btn" data-act="sample">Load sample data</button>
     <label class="btn primary">Upload workbook<input type="file" id="file" accept=".xlsx,.xls" hidden></label>
   </div>
@@ -936,7 +941,8 @@ var api = {
   CITIES: CITIES, STORES: STORES, DEFAULT_CFG: DEFAULT_CFG, NEAREST_CITY: NEAREST_CITY,
   parseApplications: parseApplications, parseTerritories: parseTerritories,
   evaluateApp: evaluateApp, run: run, explain: explain, onboardingPlan: onboardingPlan, letter: letter,
-  freePins: freePins, clone: clone, canonCity: canonCity, num: num, strengths: strengths, pad: pad
+  freePins: freePins, clone: clone, canonCity: canonCity, num: num, strengths: strengths, pad: pad,
+  ASK: ASK, LANGKEY: LANGKEY, fill: fill
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.Engine = api;
@@ -987,6 +993,215 @@ var api = {
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.SampleData = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* modules\ops.js */
+// Operations view logic: pipeline and leakage, the team's worklist, territory health, before and after, adoption metrics.
+// Pure functions of the app state S ({ apps, ters, run, cfg, overrides? }). No DOM here.
+(function (root) {
+'use strict';
+var E = root.Engine || require('../engine.js');
+
+// Issues that mean the form itself is wrong or incomplete (vs. a real gap in the partner's readiness)
+var DATA_CODES = ['PIN_BAD', 'PIN_MISMATCH', 'CITY_UNKNOWN', 'INVEST_MISSING', 'SIZE_MISSING', 'NOTES_CONFLICT'];
+var PIN_CODES = ['PIN_HAS_STORE', 'PIN_OUTSIDE'];
+var PRIORITY_RANK = { High: 0, Medium: 1, Low: 2 };
+
+// Editable assumptions for the before-and-after panel. Our own estimates, shown and editable on screen.
+var DEFAULT_TIME = {
+  screenMin: 20,    // manual: read one application, check investment, space and notes
+  pinMin: 5,        // manual: cross-check one pin against existing stores, territories and other applicants
+  followMin: 15,    // manual: write and send one follow-up to an applicant
+  reviewMin: 3,     // with the desk: read a decided application and its reason
+  sendMin: 2,       // with the desk: copy a drafted message and send it
+  teamHours: 3      // hours a day the expansion team spends on screening
+};
+
+function live(S) { return S.apps.filter(function (a) { return !a.withdrawn && S.run.res[a.id]; }); }
+function has(r, codes) { return r.issues.some(function (i) { return codes.indexOf(i.code) >= 0; }); }
+function tally(list) {
+  var m = {}; list.forEach(function (k) { m[k] = (m[k] || 0) + 1; });
+  return Object.keys(m).map(function (k) { return { reason: k, n: m[k] }; }).sort(function (a, b) { return b.n - a.n || (a.reason < b.reason ? -1 : 1); });
+}
+
+/* ---------- 1. Pipeline and leakage ---------- */
+function pipeline(S) {
+  var all = S.apps, L = live(S), res = S.run.res;
+  var clean = L.filter(function (a) { return !has(res[a.id], DATA_CODES); });
+  var eligible = clean.filter(function (a) { var o = res[a.id].outcome; return o === 'Approve' || o === 'Waitlist'; });
+  var placed = eligible.filter(function (a) { return res[a.id].outcome === 'Approve'; });
+  var ids = function (xs) { return xs.map(function (a) { return a.id; }); };
+  var minus = function (from, to) { var k = {}; to.forEach(function (a) { k[a.id] = 1; }); return from.filter(function (a) { return !k[a.id]; }); };
+
+  var gone = all.filter(function (a) { return a.withdrawn; });
+  var leak1 = minus(L, clean), leak2 = minus(clean, eligible), leak3 = minus(eligible, placed);
+  var r1 = [];
+  leak1.forEach(function (a) { res[a.id].issues.forEach(function (i) { if (DATA_CODES.indexOf(i.code) >= 0) r1.push(i.title); }); });
+  gone.forEach(function () { r1.push('Withdrawn by applicant'); });
+  var r2 = [];
+  leak2.forEach(function (a) { res[a.id].issues.forEach(function (i) { if (i.level === 'hold' || i.level === 'reject') r2.push(i.title); }); });
+  var r3 = leak3.map(function (a) { return res[a.id].waitReason === 'pin_lost' ? 'Lost the pin to a higher score' : 'Territory slots already taken'; });
+
+  return [
+    { key: 'received', label: 'Received', n: all.length, ids: ids(all), leakIds: [], reasons: [] },
+    { key: 'clean', label: 'Data clean', n: clean.length, ids: ids(clean), leakIds: ids(gone.concat(leak1)), reasons: tally(r1) },
+    { key: 'eligible', label: 'Eligible', n: eligible.length, ids: ids(eligible), leakIds: ids(leak2), reasons: tally(r2) },
+    { key: 'placed', label: 'Placed', n: placed.length, ids: ids(placed), leakIds: ids(leak3), reasons: tally(r3) }
+  ];
+}
+
+/* ---------- 2. The expansion team's worklist ---------- */
+function prioOf(S, a, r) {
+  var t = r.ter || (r.alternatives && r.alternatives[0] && S.ters.filter(function (x) { return x.id === r.alternatives[0].ter; })[0]);
+  return t ? t.priority : null;
+}
+function askText(i, cfg) { var q = E.ASK[i.code]; return q ? E.fill(q.en, { min: cfg.minSpace, need: i.need || '' }) : i.title.toLowerCase(); }
+
+function worklist(S) {
+  var res = S.run.res, cfg = S.cfg;
+  var groups = {
+    chase: { key: 'chase', label: 'Chase an applicant for a missing item', items: [] },
+    verify: { key: 'verify', label: 'Verify a condition before signing', items: [] },
+    contest: { key: 'contest', label: 'Confirm a contested pin or territory', items: [] },
+    alt: { key: 'alt', label: 'Offer an alternative pin', items: [] }
+  };
+  function item(g, a, r, x) {
+    x.id = a.id; x.name = a.name; x.lang = a.lang || 'English';
+    x.priority = prioOf(S, a, r); x.score = r.score;
+    groups[g].items.push(x);
+  }
+  live(S).forEach(function (a) {
+    var r = res[a.id];
+    if (r.outcome === 'Hold') {
+      var chase = r.issues.filter(function (i) { return i.level === 'hold' && PIN_CODES.indexOf(i.code) < 0; });
+      var pinIssue = r.issues.filter(function (i) { return PIN_CODES.indexOf(i.code) >= 0; })[0];
+      if (pinIssue && r.alternatives && r.alternatives.length) {
+        item('alt', a, r, { title: pinIssue.title + ' (' + a.pin + ')', detail: 'Offer ' + r.alternatives.map(function (p) { return p.pin + ' (' + p.ter + ')'; }).join(', ') + '.', msgs: [{ id: a.id, kind: 'alt', alt: r.alternatives[0].pin }] });
+      } else if (pinIssue) chase.unshift(Object.assign({}, pinIssue, { title: pinIssue.title + '; no open pin is left in ' + a.city + ' right now' }));
+      if (chase.length) item('chase', a, r, { title: 'Ask for ' + chase.map(function (i) { return askText(i, cfg); }).join('; '), detail: chase.map(function (i) { return i.title; }).join('. ') + '.', msgs: [{ id: a.id, kind: 'letter' }] });
+    } else if (r.outcome === 'Approve' && r.conditions.length) {
+      item('verify', a, r, { title: r.conditions.join('; '), detail: 'Approved for pin ' + a.pin + (r.ter ? ' in ' + r.ter.id : '') + '. Clear these before the agreement is signed.', msgs: [{ id: a.id, kind: 'letter' }] });
+    } else if (r.outcome === 'Waitlist' && r.alternatives && r.alternatives.length) {
+      item('alt', a, r, { title: 'Pin ' + a.pin + ' is taken', detail: 'Eligible (score ' + r.score + '). Open in ' + a.city + ': ' + r.alternatives.map(function (p) { return p.pin + ' (' + p.ter + ')'; }).join(', ') + '.', msgs: [{ id: a.id, kind: 'alt', alt: r.alternatives[0].pin }] });
+    }
+  });
+
+  // Contested pins: two or more eligible applicants on one pin
+  var byPin = {};
+  live(S).forEach(function (a) { var r = res[a.id]; if (r.pinN > 1) (byPin[a.pin] = byPin[a.pin] || []).push(a); });
+  Object.keys(byPin).forEach(function (pin) {
+    var g = byPin[pin].sort(function (p, q) { return res[p.id].rankPin - res[q.id].rankPin; }), top = g[0], rt = res[top.id];
+    var losers = g.slice(1);
+    groups.contest.items.push({ id: top.id, name: top.name, lang: top.lang || 'English', priority: rt.ter ? rt.ter.priority : null, score: rt.score,
+      title: 'Pin ' + pin + ': ' + g.length + ' eligible applicants',
+      detail: top.id + ' (' + rt.score + ') ' + (rt.outcome === 'Approve' ? 'takes it' : 'leads but its territory is full') + ', ahead of ' + losers.map(function (b) { return b.id + ' (' + res[b.id].score + ')'; }).join(', ') + '. One store per pin code.',
+      msgs: losers.map(function (b) { return { id: b.id, kind: 'letter' }; }) });
+  });
+  // Contested territories: more pin winners than open slots
+  Object.keys(S.run.byTer).forEach(function (tid) {
+    var g = S.run.byTer[tid], t = g[0].ev.ter;
+    if (g.length <= t.slots) return;
+    var out = g.slice(t.slots), cut = g[t.slots - 1];
+    groups.contest.items.push({ id: g[0].a.id, name: '', lang: '', priority: t.priority, score: g[0].ev.score,
+      title: tid + ' ' + t.city + ': ' + g.length + ' eligible for ' + t.slots + ' slot' + (t.slots === 1 ? '' : 's'),
+      detail: (cut ? 'Cut-off at ' + cut.a.id + ' (' + cut.ev.score + '). ' : 'No open slots. ') + 'Waitlisted: ' + out.map(function (x) { return x.a.id + ' (' + x.ev.score + ')'; }).join(', ') + '. Adding a slot would place the next in line.',
+      msgs: out.map(function (x) { return { id: x.a.id, kind: 'letter' }; }) });
+  });
+
+  var order = function (p, q) { return ((PRIORITY_RANK[p.priority] == null ? 3 : PRIORITY_RANK[p.priority]) - (PRIORITY_RANK[q.priority] == null ? 3 : PRIORITY_RANK[q.priority])) || (q.score - p.score) || (p.id < q.id ? -1 : 1); };
+  return ['chase', 'verify', 'contest', 'alt'].map(function (k) { groups[k].items.sort(order); return groups[k]; });
+}
+
+var ALT = {
+  en: 'Dear {name}, about your application {id}: pin code {pin} is not available, but we have an open place in pin code {alt} ({city}). If you can find a ground-floor or mall space there, we can take your application forward. Please reply to let us know.',
+  hi: 'प्रिय {name}, आपके आवेदन {id} के बारे में: पिन कोड {pin} उपलब्ध नहीं है, लेकिन पिन कोड {alt} ({city}) में हमारे पास जगह खाली है। अगर आप वहाँ ग्राउंड फ्लोर या मॉल में दुकान ढूँढ सकें, तो हम आपका आवेदन आगे बढ़ा सकते हैं। कृपया जवाब देकर बताएँ।',
+  kn: 'ಆತ್ಮೀಯ {name}, ನಿಮ್ಮ ಅರ್ಜಿ {id} ಕುರಿತು: ಪಿನ್ ಕೋಡ್ {pin} ಲಭ್ಯವಿಲ್ಲ, ಆದರೆ ಪಿನ್ ಕೋಡ್ {alt} ({city}) ನಲ್ಲಿ ನಮ್ಮಲ್ಲಿ ಸ್ಥಾನ ಖಾಲಿ ಇದೆ. ಅಲ್ಲಿ ನೆಲ ಮಹಡಿ ಅಥವಾ ಮಾಲ್‌ನಲ್ಲಿ ಜಾಗ ಸಿಕ್ಕರೆ, ನಿಮ್ಮ ಅರ್ಜಿಯನ್ನು ಮುಂದುವರಿಸಬಹುದು. ದಯವಿಟ್ಟು ಉತ್ತರಿಸಿ ತಿಳಿಸಿ.'
+};
+function message(S, m, lang) {
+  var a = S.apps.filter(function (x) { return x.id === m.id; })[0], r = S.run.res[m.id];
+  lang = lang || a.lang || 'English';
+  if (m.kind === 'alt') return E.fill(ALT[E.LANGKEY[lang] || 'en'], { name: a.name, id: a.id, pin: a.pin, alt: m.alt, city: a.city });
+  return E.letter(r, a, lang, S.cfg);
+}
+
+/* ---------- 3. Territory health ---------- */
+function territoryHealth(S) {
+  var run = S.run, res = run.res, L = live(S);
+  return S.ters.map(function (t) {
+    var filled = Math.min(t.slots, run.approvedByTer[t.id] || 0), open = t.slots - filled;
+    var locked = t.pins.filter(function (p) { return run.ctx.storeByPin[p]; });
+    var freePins = t.pins.filter(function (p) { return !run.ctx.storeByPin[p] && !run.approvedPins[p]; });
+    var inT = L.filter(function (a) { return res[a.id].ter && res[a.id].ter.id === t.id; });
+    var eligible = inT.filter(function (a) { var o = res[a.id].outcome; return o === 'Approve' || o === 'Waitlist'; });
+    var couldFill = inT.filter(function (a) { var r = res[a.id]; return r.outcome === 'Hold' && r.ifFixed && r.ifFixed.possible && r.ifFixed.outcome === 'Approve'; });
+    var flags = [];
+    if (eligible.length > t.slots) flags.push({ k: 'over', text: 'Oversubscribed: ' + eligible.length + ' eligible for ' + t.slots + ' slot' + (t.slots === 1 ? '' : 's') });
+    if (open > 0) flags.push({ k: 'under', text: 'Undersubscribed: ' + open + ' open slot' + (open === 1 ? '' : 's') + ', no eligible applicant on a free pin' + (couldFill.length ? ' (' + couldFill.map(function (a) { return a.id; }).join(', ') + ' could, once fixed)' : '') });
+    if (open > freePins.length) flags.push({ k: 'short', text: 'Only ' + freePins.length + ' free pin' + (freePins.length === 1 ? '' : 's') + ' left for ' + open + ' open slot' + (open === 1 ? '' : 's') });
+    if (locked.length) flags.push({ k: 'locked', text: locked.length + ' of ' + t.pins.length + ' pins locked by existing stores (' + locked.join(', ') + ')' });
+    return { id: t.id, city: t.city, tier: t.tier, priority: t.priority, slots: t.slots, filled: filled, open: open, pins: t.pins.length,
+             locked: locked.length, eligible: eligible.length, flags: flags };
+  }).sort(function (p, q) { return PRIORITY_RANK[p.priority] - PRIORITY_RANK[q.priority] || (p.id < q.id ? -1 : 1); });
+}
+
+/* ---------- 4. Before and after ---------- */
+function beforeAfter(S, T) {
+  var L = live(S), res = S.run.res, wl = worklist(S);
+  var n = L.length;
+  var followIds = {}; wl.forEach(function (g) { if (g.key === 'chase' || g.key === 'alt') g.items.forEach(function (x) { followIds[x.id] = 1; }); });
+  var follow = Object.keys(followIds).length;
+  var manualMin = n * (T.screenMin + T.pinMin) + follow * T.followMin;
+  var deskMin = n * T.reviewMin + follow * T.sendMin;
+  var dayMin = Math.max(T.teamHours, 0.1) * 60;
+  var withIssue = function (code) { return L.filter(function (a) { return res[a.id].issues.some(function (i) { return i.code === code; }); }).map(function (a) { return a.id; }); };
+  var storeClash = withIssue('PIN_HAS_STORE');
+  var pinRivals = L.filter(function (a) { return res[a.id].waitReason === 'pin_lost'; }).map(function (a) { return a.id; });
+  var mismatch = withIssue('PIN_MISMATCH').concat(withIssue('PIN_OUTSIDE'));
+  var contra = withIssue('NOTES_CONFLICT'), exp = withIssue('EXP_CONFLICT');
+  return {
+    n: n, follow: follow,
+    manualHours: manualMin / 60, deskHours: deskMin / 60, savedHours: (manualMin - deskMin) / 60,
+    manualDays: n * (T.screenMin + T.pinMin) / dayMin, deskDays: n * T.reviewMin / dayMin,
+    caught: [
+      { label: 'Pin already has a store', ids: storeClash },
+      { label: 'Second applicant on one pin', ids: pinRivals },
+      { label: 'Pin does not match the city or territory', ids: mismatch },
+      { label: 'Notes contradict the form', ids: contra },
+      { label: 'Experience contradicts the business description', ids: exp }
+    ]
+  };
+}
+
+/* ---------- 5. Adoption metrics ---------- */
+function newTracker() { return { holdSince: {}, resolved: [], copies: [] }; }
+// Call after every recompute: notes when a hold starts and when it clears
+function track(S, ev, now) {
+  live(S).forEach(function (a) {
+    var o = S.run.res[a.id].outcome;
+    if (o === 'Hold') { if (ev.holdSince[a.id] == null) ev.holdSince[a.id] = now; }
+    else if (ev.holdSince[a.id] != null) { ev.resolved.push({ id: a.id, ms: now - ev.holdSince[a.id], to: o }); delete ev.holdSince[a.id]; }
+  });
+}
+function median(xs) { if (!xs.length) return null; var s = xs.slice().sort(function (a, b) { return a - b; }), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function adoption(S, ev) {
+  var L = live(S), decided = L.length, overrides = (S.overrides || []).length;
+  var slots = 0, filled = 0; S.ters.forEach(function (t) { slots += t.slots; filled += Math.min(t.slots, S.run.approvedByTer[t.id] || 0); });
+  var inPref = ev.copies.filter(function (c) { return c.lang === c.pref; }).length;
+  var withPref = L.filter(function (a) { return a.lang; }).length;
+  return {
+    accepted: { n: decided - overrides, of: decided, overrides: overrides },
+    holds: { open: Object.keys(ev.holdSince).length, resolved: ev.resolved.length, medianMin: ev.resolved.length ? median(ev.resolved.map(function (x) { return x.ms; })) / 60000 : null },
+    slotFill: { filled: filled, slots: slots },
+    language: { inPref: inPref, copies: ev.copies.length, withPref: withPref, of: decided }
+  };
+}
+
+var api = { DATA_CODES: DATA_CODES, DEFAULT_TIME: DEFAULT_TIME, pipeline: pipeline, worklist: worklist, message: message,
+  territoryHealth: territoryHealth, beforeAfter: beforeAfter, newTracker: newTracker, track: track, adoption: adoption };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.DeskOps = api;
 })(typeof window !== 'undefined' ? window : globalThis);
 
 </script>
@@ -1050,7 +1265,7 @@ function load(appsAoA, tersAoA, label) {
   S.undo = []; S.changed = {}; S.open = {}; S.prevSnap = null; S.askLog = []; S.label = label || '';
   S.initial = E.clone({ apps: apps, ters: ters });
   recompute(true);
-  S.tab = 'decisions'; S.filter = 'all'; S.q = '';
+  S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.filterIds = null;
   render();
 }
 
@@ -1155,11 +1370,13 @@ function decisionsHtml() {
   }).join('');
   var rows = S.apps.filter(function (a) {
     var r = S.run.res[a.id], o = a.withdrawn ? 'Withdrawn' : r.outcome;
+    if (S.filterIds && S.filterIds.indexOf(a.id) < 0) return false;
     if (S.filter !== 'all' && o !== S.filter) return false;
     if (q && (a.id + ' ' + a.name + ' ' + a.pin + ' ' + a.city).toLowerCase().indexOf(q) < 0) return false;
     return true;
   }).map(rowHtml).join('');
-  return '<div class="toolbar"><div class="chips">' + chips + '</div>' +
+  var only = S.filterIds ? '<p class="only">Showing ' + esc(S.filterLabel || 'a selection') + ' (' + S.filterIds.length + '). <button class="link" data-act="clear-ids">Show all</button></p>' : '';
+  return only + '<div class="toolbar"><div class="chips">' + chips + '</div>' +
     '<input id="q" class="search" type="search" placeholder="Search ID, name, pin, city" value="' + esc(S.q) + '" aria-label="Search applications"></div>' +
     '<div class="rows">' + (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
 }
@@ -1633,7 +1850,8 @@ document.addEventListener('click', function (e) {
     case 'dl-sample': downloadSample(); break;
     case 'export': exportDecisions(); break;
     case 'tab': S.tab = v; render(); break;
-    case 'filter': S.filter = v; S.tab = 'decisions'; render(); break;
+    case 'clear-ids': S.filterIds = null; refreshBody(); break;
+    case 'filter': S.filterIds = null; S.filter = v; S.tab = 'decisions'; render(); break;
     case 'toggle': S.open[v] = !S.open[v]; refreshBody(); break;
     case 'lang': S.letterLang[el.getAttribute('data-id')] = v; refreshBody(); break;
     case 'copy': {
@@ -1643,8 +1861,8 @@ document.addEventListener('click', function (e) {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, done);
       else { var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (x) {} document.body.removeChild(ta); done(); }
       break; }
-    case 'pin': S.tab = 'decisions'; S.filter = 'all'; S.q = v; render(); break;
-    case 'open-app': S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.open[v] = true; render();
+    case 'pin': S.filterIds = null; S.tab = 'decisions'; S.filter = 'all'; S.q = v; render(); break;
+    case 'open-app': S.filterIds = null; S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.open[v] = true; render();
       var row = document.getElementById('row-' + v); if (row) row.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
     case 'ask': { var i = $('#askin'); ask(i.value); break; }
     case 'sugg': ask(v); break;
@@ -1681,6 +1899,228 @@ document.addEventListener('change', function (e) {
 
 render();
 window.__desk = { S: S, E: E, ask: ask, load: load, rerender: render, recompute: recompute, getApp: getApp, esc: esc, pill: pill, pushUndo: pushUndo, getRun: function () { return S.run; } };
+})();
+
+</script>
+<script>
+/* ext\ops-view.js */
+// Operations view shown above the decisions list: pipeline and leakage, today's worklist, territory health,
+// before and after, adoption metrics. Logic lives in src/modules/ops.js.
+(function () {
+'use strict';
+var O = window.DeskOps, D = window.__desk, S = D.S, esc = D.esc;
+var T = JSON.parse(JSON.stringify(O.DEFAULT_TIME));
+var ev = O.newTracker(), seen = null;
+var V = { open: true, more: {} };
+var PCLASS = { High: 'p-high', Medium: 'p-med', Low: 'p-low' };
+
+function n1(x) { return (Math.round(x * 10) / 10).toString(); }
+function pct(a, b) { return b ? Math.round(100 * a / b) + '%' : '–'; }
+function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
+function appLink(id) { return '<button class="link" data-act="open-app" data-v="' + esc(id) + '">' + esc(id) + '</button>'; }
+
+/* ---------- pipeline ---------- */
+function pipeHtml() {
+  var p = O.pipeline(S), total = p[0].n, out = [];
+  p.forEach(function (s, i) {
+    if (i) {
+      var lk = s.leakIds.length;
+      out.push('<div class="leak' + (lk ? '' : ' none') + '">' + (lk ?
+        '<button class="leak-n" data-act="ops-ids" data-ids="' + s.leakIds.join(',') + '" data-label="applications that dropped out before ' + esc(s.label.toLowerCase()) + '">−' + lk + '</button>' +
+        '<ul>' + s.reasons.slice(0, 3).map(function (r) { return '<li>' + esc(r.reason) + (r.n > 1 ? ' <b>' + r.n + '</b>' : '') + '</li>'; }).join('') + (s.reasons.length > 3 ? '<li class="muted">and ' + (s.reasons.length - 3) + ' more</li>' : '') + '</ul>'
+        : '<span class="muted">no drop-out</span>') + '</div>');
+    }
+    out.push('<button class="step s-' + s.key + '" data-act="ops-ids" data-ids="' + s.ids.join(',') + '" data-label="applications that reached ' + esc(s.label.toLowerCase()) + '">' +
+      '<span>' + esc(s.label) + '</span><b>' + s.n + '</b><small>' + (i ? pct(s.n, total) + ' of received' : 'applications') + '</small></button>');
+  });
+  return '<div class="card pipe-card"><h3>Pipeline and where applications drop out</h3><p class="muted sm">Click a step or a drop-out to see those applications in the list below.</p><div class="pipe">' + out.join('') + '</div></div>';
+}
+
+/* ---------- worklist ---------- */
+function copyBtn(m, many) {
+  var a = D.getApp(m.id), lang = a.lang || 'English';
+  return '<button class="btn sm" data-act="ops-copy" data-id="' + esc(m.id) + '" data-kind="' + m.kind + '" data-alt="' + esc(m.alt || '') + '">Copy message' + (many ? ' to ' + esc(m.id) : '') + ' (' + lang + ')</button>';
+}
+function workHtml() {
+  var groups = O.worklist(S), total = 0;
+  groups.forEach(function (g) { total += g.items.length; });
+  var body = groups.filter(function (g) { return g.items.length; }).map(function (g) {
+    var all = !!V.more[g.key], items = all ? g.items : g.items.slice(0, 3);
+    return '<details class="wg"' + (g.key === 'verify' && !all ? '' : ' open') + '><summary><span>' + esc(g.label) + '</span><b>' + g.items.length + '</b></summary><ul class="wl">' + items.map(function (x) {
+      return '<li><div class="wl-h">' + (x.priority ? '<span class="prio ' + PCLASS[x.priority] + '">' + x.priority + '</span>' : '<span class="prio">No territory</span>') +
+        (x.name ? appLink(x.id) + ' <span>' + esc(x.name) + '</span>' : '') + '</div>' +
+        '<p class="wl-t">' + esc(x.title.charAt(0).toUpperCase() + x.title.slice(1)) + '</p><p class="muted sm">' + esc(x.detail) + '</p>' +
+        '<div class="wl-b">' + x.msgs.map(function (m) { return copyBtn(m, x.msgs.length > 1 || m.id !== x.id); }).join('') + '</div></li>';
+    }).join('') + '</ul>' + (g.items.length > 3 ? '<button class="link sm" data-act="ops-more" data-v="' + g.key + '">' + (all ? 'Show fewer' : 'Show all ' + g.items.length) + '</button>' : '') + '</details>';
+  }).join('');
+  return '<div class="card"><h3>Worklist for today <span class="count">' + total + '</span></h3><p class="muted sm">What needs a person, highest-priority territory first, then by score. Messages are drafted in each applicant\'s language.</p>' +
+    (body || '<p>Nothing needs a person right now.</p>') + '</div>';
+}
+
+/* ---------- territory health ---------- */
+var FLAG = { over: 'Oversubscribed', under: 'Undersubscribed', short: 'Short of pins', locked: 'Pins locked' };
+function healthHtml() {
+  var rows = O.territoryHealth(S).map(function (t) {
+    var dots = ''; for (var i = 0; i < t.slots; i++) dots += '<i class="sdot' + (i < t.filled ? ' on' : '') + '"></i>';
+    return '<li><div class="th-h"><b>' + esc(t.id) + '</b> <span>' + esc(t.city) + '</span><span class="prio ' + PCLASS[t.priority] + '">' + t.priority + '</span>' +
+      '<span class="grow"></span><span class="dots" title="' + t.filled + ' of ' + t.slots + ' slots filled">' + dots + '</span><small class="muted">' + t.filled + ' filled, ' + t.open + ' open, ' + t.locked + ' blocked</small></div>' +
+      (t.flags.length ? '<ul class="tf">' + t.flags.map(function (f) { return '<li class="f-' + f.k + '"><span>' + FLAG[f.k] + '</span> ' + esc(f.text.replace(/^[^:]+: /, '')) + '</li>'; }).join('') + '</ul>' : '<p class="muted sm">Balanced: every slot has a partner.</p>') + '</li>';
+  }).join('');
+  return '<div class="card"><h3>Territory health</h3><p class="muted sm">Slots filled, open and blocked per territory. Blocked means a pin with an existing store.</p><ul class="th">' + rows + '</ul></div>';
+}
+
+/* ---------- before and after ---------- */
+function tIn(k, label) { return '<label class="ba-in"><span>' + label + '</span><input type="number" min="0" step="1" value="' + T[k] + '" data-ops-t="' + k + '"></label>'; }
+function baHtml() {
+  var b = O.beforeAfter(S, T), caught = 0;
+  b.caught.forEach(function (c) { caught += c.ids.length; });
+  return '<div class="card"><h3>Before and after, for this file</h3>' +
+    '<div class="ba-out">' +
+      '<div><small>Team hours on this file</small><b>' + n1(b.manualHours) + ' <i>→</i> ' + n1(b.deskHours) + '</b><span>' + n1(b.savedHours) + ' hours saved</span></div>' +
+      '<div><small>Time to decide the whole file</small><b>' + n1(b.manualDays) + ' <i>→</i> ' + n1(b.deskDays) + '</b><span>working days</span></div>' +
+      '<div><small>Problems caught before signing</small><b>' + caught + '</b><span>pin conflicts and contradictions</span></div>' +
+    '</div>' +
+    '<p class="muted sm">By hand: ' + b.n + ' applications × (' + T.screenMin + ' + ' + T.pinMin + ' min) + ' + plural(b.follow, 'follow-up') + ' × ' + T.followMin + ' min. ' +
+      'With the desk: ' + b.n + ' × ' + T.reviewMin + ' min review + ' + b.follow + ' × ' + T.sendMin + ' min to send. Days assume ' + T.teamHours + ' hours of screening a day.</p>' +
+    '<ul class="caught">' + b.caught.filter(function (c) { return c.ids.length; }).map(function (c) { return '<li>' + esc(c.label) + ': ' + c.ids.map(appLink).join(', ') + '</li>'; }).join('') + '</ul>' +
+    '<details class="ba-a"><summary>Assumptions (minutes, our estimates; change them to match your team)</summary><div class="ba-grid">' +
+      tIn('screenMin', 'Screen one application by hand') + tIn('pinMin', 'Cross-check one pin by hand') + tIn('followMin', 'Write one follow-up by hand') +
+      tIn('reviewMin', 'Review one decision with the desk') + tIn('sendMin', 'Send one drafted message') + tIn('teamHours', 'Screening hours a day') +
+    '</div></details></div>';
+}
+
+/* ---------- adoption ---------- */
+function adoptHtml() {
+  var a = O.adoption(S, ev);
+  var tile = function (lbl, big, sub) { return '<div><small>' + lbl + '</small><b>' + big + '</b><span>' + sub + '</span></div>'; };
+  return '<div class="card"><h3>Adoption metrics</h3><p class="muted sm">Counted live in this session. In a pilot these come from the decision log, week by week.</p><div class="ba-out ad">' +
+    tile('Decisions accepted without override', pct(a.accepted.n, a.accepted.of), a.accepted.n + ' of ' + a.accepted.of + (a.accepted.overrides ? ', ' + plural(a.accepted.overrides, 'override') : ', no overrides')) +
+    tile('Time to resolve a hold', a.holds.medianMin == null ? '–' : a.holds.medianMin < 1 ? 'under 1 min' : n1(a.holds.medianMin) + ' min', a.holds.resolved + ' resolved, ' + a.holds.open + ' still open') +
+    tile('Slot-fill rate', pct(a.slotFill.filled, a.slotFill.slots), a.slotFill.filled + ' of ' + a.slotFill.slots + ' slots') +
+    tile('Messaged in their own language', a.language.copies ? pct(a.language.inPref, a.language.copies) : '–', a.language.inPref + ' of ' + plural(a.language.copies, 'message') + ' copied; ' + a.language.withPref + ' of ' + a.language.of + ' gave a language') +
+    '</div></div>';
+}
+
+// note when holds start and clear; safe to call on every render
+function sync() {
+  if (!S.run) return;
+  if (seen !== S.initial) { seen = S.initial; ev = O.newTracker(); }
+  O.track(S, ev, Date.now());
+}
+
+function view() {
+  if (!S.run) return '';
+  sync();
+  return '<section class="ops" aria-label="Operations view"><header class="ops-h"><h2>Operations view</h2><button class="link sm" data-act="ops-toggle">' + (V.open ? 'Hide' : 'Show') + '</button></header>' +
+    (V.open ? pipeHtml() + '<div class="ops-grid">' + workHtml() + healthHtml() + '</div><div class="ops-grid">' + baHtml() + adoptHtml() + '</div>' : '') + '</section>';
+}
+
+window.DeskExt.afterSummary.push(view);
+window.DeskExt.afterRender.push(sync);
+
+function copy(text, el) {
+  var label = el.textContent, done = function () { el.textContent = 'Copied'; setTimeout(function () { el.textContent = label; }, 1400); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done);
+  else { var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (x) {} document.body.removeChild(ta); done(); }
+}
+function logCopy(id, lang) {
+  var a = D.getApp(id); if (!a) return;
+  ev.copies.push({ id: id, lang: lang, pref: a.lang || 'English' });
+  var card = document.querySelector('.ops .ad'); if (card) card.parentNode.outerHTML = adoptHtml();
+}
+
+// row "Copy message" in the decisions list counts toward the language metric too
+document.addEventListener('click', function (e) {
+  var el = e.target.closest && e.target.closest('[data-act="copy"]'); if (!el) return;
+  var id = el.getAttribute('data-id'), a = D.getApp(id);
+  if (a) logCopy(id, S.letterLang[id] || a.lang || 'English');
+}, true);
+
+document.addEventListener('click', function (e) {
+  var el = e.target.closest && e.target.closest('[data-act^="ops-"]'); if (!el) return;
+  var act = el.getAttribute('data-act');
+  if (act === 'ops-toggle') { V.open = !V.open; D.rerender(); }
+  else if (act === 'ops-more') { var k = el.getAttribute('data-v'); V.more[k] = !V.more[k]; D.rerender(); }
+  else if (act === 'ops-copy') {
+    var id = el.getAttribute('data-id'), a = D.getApp(id), lang = a.lang || 'English';
+    copy(O.message(S, { id: id, kind: el.getAttribute('data-kind'), alt: el.getAttribute('data-alt') }, lang), el);
+    logCopy(id, lang);
+  } else if (act === 'ops-ids') {
+    var ids = el.getAttribute('data-ids');
+    S.filterIds = ids ? ids.split(',') : []; S.filterLabel = el.getAttribute('data-label'); S.filter = 'all'; S.q = ''; S.tab = 'decisions';
+    D.rerender();
+    var tabs = document.querySelector('.tabs'); if (tabs && tabs.scrollIntoView) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+});
+document.addEventListener('change', function (e) {
+  var k = e.target.getAttribute && e.target.getAttribute('data-ops-t'); if (!k) return;
+  var v = parseFloat(e.target.value); if (isNaN(v) || v < 0) return;
+  T[k] = v; D.rerender();
+  var d = document.querySelector('.ba-a'); if (d) d.open = true;
+});
+
+var css = document.createElement('style');
+css.textContent = [
+  '.ops { margin-bottom: 16px; }',
+  '.ops-h { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 2px 10px; }',
+  '.ops-h h2 { font-family: var(--display); font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }',
+  '.ops .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }',
+  '.ops h3 { font-family: var(--display); font-size: 16px; font-weight: 800; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }',
+  '.ops .count { font-family: var(--body); font-size: 12.5px; font-weight: 600; background: var(--ink); color: var(--bg); border-radius: 999px; padding: 0 8px; }',
+  '.ops-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; margin-top: 12px; align-items: start; }',
+  '.pipe { display: grid; grid-template-columns: minmax(0,.8fr) minmax(0,1.3fr) minmax(0,.8fr) minmax(0,1.3fr) minmax(0,.8fr) minmax(0,1.3fr) minmax(0,.8fr); gap: 6px; margin-top: 10px; align-items: stretch; }',
+  '.step { display: flex; flex-direction: column; align-items: flex-start; gap: 0; text-align: left; border: 1.5px solid var(--line); border-radius: 10px; background: var(--surface2); padding: 9px 11px; }',
+  '.step:hover, .leak-n:hover { border-color: var(--accent); }',
+  '.step span { font-size: 13px; font-weight: 600; color: var(--muted); }',
+  '.step b { font-family: var(--display); font-size: 28px; font-weight: 800; line-height: 1.1; }',
+  '.step small { font-size: 12px; color: var(--muted); }',
+  '.step.s-placed { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--surface)); } .step.s-placed b { color: var(--ok); }',
+  '.leak { font-size: 12.5px; padding: 4px 2px; border-top: 2px dashed color-mix(in srgb, var(--hold) 55%, transparent); align-self: center; }',
+  '.leak.none { border-top-color: var(--line); }',
+  '.leak ul { list-style: none; margin: 4px 0 0; padding: 0; color: var(--muted); line-height: 1.35; }',
+  '.leak li { margin-bottom: 2px; } .leak li b { color: var(--ink); }',
+  '.leak-n { border: 1px solid color-mix(in srgb, var(--hold) 45%, transparent); background: color-mix(in srgb, var(--hold) 10%, var(--surface)); color: var(--hold); font-weight: 700; border-radius: 999px; padding: 0 9px; font-size: 13px; }',
+  '.wg { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }',
+  '.wg summary { display: flex; justify-content: space-between; font-weight: 600; font-size: 14px; cursor: pointer; list-style: none; }',
+  '.wg summary::-webkit-details-marker { display: none; }',
+  '.wg summary::before { content: "\\25B8"; color: var(--muted); margin-right: 6px; } .wg[open] summary::before { content: "\\25BE"; }',
+  '.wg summary span { flex: 1; } .wg summary b { color: var(--muted); font-weight: 600; }',
+  '.wl { list-style: none; padding: 0; margin: 6px 0 4px; }',
+  '.wl li { padding: 8px 0; border-bottom: 1px dashed var(--line); } .wl li:last-child { border-bottom: 0; }',
+  '.wl-h { display: flex; align-items: center; gap: 8px; font-size: 13.5px; flex-wrap: wrap; } .wl-h .link { font-weight: 600; }',
+  '.wl-t { font-size: 14px; margin: 3px 0 1px; } .wl li .sm { margin-bottom: 6px; }',
+  '.wl-b { display: flex; gap: 6px; flex-wrap: wrap; }',
+  '.prio { font-size: 11.5px; font-weight: 600; border-radius: 4px; padding: 0 6px; border: 1px solid var(--line); color: var(--muted); }',
+  '.prio.p-high { color: var(--no); border-color: color-mix(in srgb, var(--no) 40%, transparent); }',
+  '.prio.p-med { color: var(--hold); border-color: color-mix(in srgb, var(--hold) 40%, transparent); }',
+  '.th { list-style: none; padding: 0; margin: 8px 0 0; }',
+  '.th > li { padding: 8px 0; border-bottom: 1px solid var(--line); } .th > li:last-child { border-bottom: 0; }',
+  '.th-h { display: flex; align-items: center; gap: 8px; font-size: 14px; flex-wrap: wrap; } .th-h small { font-size: 12.5px; }',
+  '.tf { list-style: none; padding: 0; margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }',
+  '.tf li { margin-top: 2px; } .tf li span { font-weight: 600; }',
+  '.tf .f-over span { color: var(--wait); } .tf .f-under span { color: var(--hold); } .tf .f-short span { color: var(--no); } .tf .f-locked span { color: var(--muted); }',
+  '.ba-out { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }',
+  '.ba-out.ad { grid-template-columns: repeat(2, minmax(0, 1fr)); }',
+  '.ba-out > div { background: var(--surface2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; }',
+  '.ba-out small { font-size: 12px; color: var(--muted); line-height: 1.3; }',
+  '.ba-out b { font-family: var(--display); font-size: 22px; font-weight: 800; line-height: 1.2; margin-top: 2px; } .ba-out b i { font-style: normal; color: var(--muted); font-weight: 600; }',
+  '.ba-out span { font-size: 12.5px; color: var(--muted); }',
+  '.caught { margin: 4px 0 8px; padding-left: 18px; font-size: 13.5px; }',
+  '.ba-a summary { cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--accent); }',
+  '.ba-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; margin-top: 8px; }',
+  '.ba-in { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; }',
+  '.ba-in input { width: 64px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); text-align: right; }',
+  '.only { font-size: 13.5px; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: 8px; padding: 7px 12px; }',
+  '@media (max-width: 1060px) { .ops-grid { grid-template-columns: minmax(0, 1fr); } }',
+  '@media (max-width: 720px) {',
+  '  .pipe { grid-template-columns: minmax(0, 1fr); }',
+  '  .step { flex-direction: row; align-items: baseline; gap: 10px; } .step b { order: -1; font-size: 24px; }',
+  '  .leak { border-top: 0; border-left: 2px dashed color-mix(in srgb, var(--hold) 55%, transparent); padding: 2px 0 2px 12px; margin-left: 14px; display: flex; gap: 10px; align-items: flex-start; }',
+  '  .leak.none { border-left-color: var(--line); } .leak ul { margin: 0; }',
+  '  .ba-out { grid-template-columns: minmax(0, 1fr); } .ba-out.ad { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ba-grid { grid-template-columns: minmax(0, 1fr); }',
+  '}'
+].join('\n');
+document.head.appendChild(css);
 })();
 
 </script>
