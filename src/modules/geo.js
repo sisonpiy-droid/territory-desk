@@ -123,6 +123,21 @@ function backtest(cfg) {
   });
 }
 
+// Fair comparison for the back-test: the same rank for the centre of every other pin. Post offices sit in busy places,
+// so pin centres rank high anyway; stores only say something if they beat this baseline.
+function baseline(cfg) {
+  cfg = cfg || DEFAULTS;
+  var storePins = {}; (E ? E.STORES : []).forEach(function (s) { storePins[s.pin] = 1; });
+  var tops = [];
+  Object.keys(G.pins).forEach(function (p) {
+    if (storePins[p]) return;
+    var info = G.pins[p], c = city(info.city, cfg), i = cellAt(c, info.lat, info.lon);
+    if (i >= 0) tops.push(Math.round(100 * (c.potential.filter(function (v) { return v > c.potential[i]; }).length + 1) / c.n));
+  });
+  tops.sort(function (a, b) { return a - b; });
+  return { n: tops.length, medianTop: tops.length ? tops[Math.floor((tops.length - 1) / 2)] : null };
+}
+
 /* ---------- a plain search brief for the partner ---------- */
 function brief(rec, who) {
   if (!rec.ok) return rec.why;
@@ -137,7 +152,7 @@ function brief(rec, who) {
   return lines.join('\n');
 }
 
-var api = { DEFAULTS: DEFAULTS, clone: clone, km: km, city: city, pinInfo: pinInfo, sites: sites, overlap: overlap, recommend: recommend, backtest: backtest, brief: brief, data: G };
+var api = { DEFAULTS: DEFAULTS, clone: clone, km: km, city: city, pinInfo: pinInfo, sites: sites, overlap: overlap, recommend: recommend, backtest: backtest, baseline: baseline, brief: brief, data: G };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.DeskGeo = api;
 })(typeof window !== 'undefined' ? window : globalThis);

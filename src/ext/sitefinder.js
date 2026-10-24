@@ -67,8 +67,12 @@ function assumptionsHtml() {
 function sanityHtml() {
   var bt = Geo.backtest(V.cfg).filter(function (b) { return b.ok; });
   var med = bt.map(function (b) { return b.topPctCity; }).sort(function (a, b) { return a - b; });
-  var m = med.length ? med[Math.floor((med.length - 1) / 2)] : 0;
-  return '<details class="sf-box"><summary>Sanity check: where today\'s 10 stores rank</summary><p class="muted sm">If the crowd estimate means anything, the brand\'s existing stores should sit in busy hexagons. Each store is placed at its pin\'s centre (street addresses are not in the data), and ranked on crowd potential without any spacing penalty. Median store: top ' + m + '% of its city.</p>' +
+  var m = med.length ? med[Math.floor((med.length - 1) / 2)] : 0, base = Geo.baseline(V.cfg);
+  var pinMed = bt.map(function (b) { return Math.round(100 * b.rankPin / b.nPin); }).sort(function (a, b) { return a - b; });
+  return '<details class="sf-box"><summary>Sanity check: where today\'s 10 stores rank</summary><p class="muted sm">If the crowd estimate means anything, the brand\'s existing stores should sit in busy hexagons. Each store is placed at its pin\'s centre (street addresses are not in the data), and ranked on crowd potential without any spacing penalty.</p>' +
+    '<ul class="sm"><li>Median store: top ' + m + '% of its city. For comparison, the centre of a typical other pin ranks top ' + base.medianTop + '% (' + base.n + ' pins), because post offices sit in busy places. So stores beat the baseline, but most of the high rank comes from where pin centres are, and 10 stores is a small sample.</li>' +
+    '<li>Inside their own pin, stores rank in the middle (median at ' + pinMed[Math.floor((pinMed.length - 1) / 2)] + '% down the list). This does not test the within-pin choice: without street addresses we cannot tell which hexagon a store is really in.</li>' +
+    '<li>To validate properly: geocode the 10 store addresses and compare against customer-origin data from their billing systems.</li></ul>' +
     '<table class="cmp sf-t"><thead><tr><th>Store</th><th>Pin</th><th>City</th><th>Rank in its pin</th><th>Rank in its city</th></tr></thead><tbody>' +
     bt.map(function (b) { return '<tr><td>' + esc(b.id) + '</td><td>' + esc(b.pin) + '</td><td>' + esc(b.city) + '</td><td>' + b.rankPin + ' of ' + b.nPin + '</td><td>' + b.rankCity + ' of ' + b.nCity + ' (top ' + b.topPctCity + '%)</td></tr>'; }).join('') + '</tbody></table></details>';
 }
