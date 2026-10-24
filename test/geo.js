@@ -35,6 +35,15 @@ t('back-test covers all 10 stores', () => {
 t('search brief has the pin, three numbered spots and the footfall caveat', () => {
   const s = Geo.brief(Geo.recommend('575002'), 'APP-007'); assert(/575002/.test(s) && /\n1\. /.test(s) && /\n3\. /.test(s) && /not measured footfall/.test(s));
 });
+t('a live area (shape returned by api/place.js) plugs in and is labelled as daytime activity only', () => {
+  const src = Geo.data.cities['Tumakuru'], area = JSON.parse(JSON.stringify(src));
+  area.live = true; area.residents = false; area.label = 'Test town, Karnataka'; area.source = 'test'; area.fetched = '2026-10-25';
+  area.pin = area.pin.map(() => '999998');
+  Geo.addArea({ name: 'Around 999998', pin: '999998', area: area, pins: { '999998': { lat: src.centre[0], lon: src.centre[1], city: 'Around 999998' } } });
+  const r = Geo.recommend('999998'); assert(r.ok && r.live && r.basis === 'daytime activity only' && r.top.length === 3);
+  assert(r.top[0].reason[0].indexOf('daytime activity only') > 0);
+  delete Geo.data.cities['Around 999998']; delete Geo.data.pins['999998'];
+});
 t('page: Site finder tab draws hexagons, detail and Ask work, no script errors', () => {
   const { JSDOM, VirtualConsole } = require('jsdom'), errs = [], vc = new VirtualConsole(); vc.on('jsdomError', e => errs.push(e.message));
   const w = new JSDOM(fs.readFileSync(path.join(__dirname, '..', 'dist', 'index.html'), 'utf8'), { runScripts: 'dangerously', virtualConsole: vc, pretendToBeVisual: true }).window, d = w.document, D = w.__desk;

@@ -4,7 +4,23 @@
 'use strict';
 var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, Geo = window.DeskGeo;
 if (!Geo || !Geo.data) return;
-var V = { pin: '', who: null, cfg: Geo.clone(Geo.DEFAULTS) };
+var V = { pin: '', query: '', who: null, cfg: Geo.clone(Geo.DEFAULTS) };
+var live = {};   // live lookups in progress or failed, by pin or place name
+
+// Pins and places outside the built-in data are looked up through api/place.js (hosted page only).
+function canFetch() { return typeof fetch === 'function' && /^https?:$/.test(location.protocol); }
+function lookup(key, isPin, then) {
+  if (live[key] && live[key].state === 'loading') return;
+  live[key] = { state: 'loading' };
+  fetch('api/place?' + (isPin ? 'pin=' : 'q=') + encodeURIComponent(key))
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (x) {
+      if (!x.ok || !x.j.area) live[key] = { state: 'error', msg: x.j.error || 'The live map lookup failed.' };
+      else { Geo.addArea(x.j); delete live[key]; if (!isPin && V.query === key) { V.pin = x.j.pin; V.query = ''; } }
+      if (then) then(x.ok ? x.j : null, x.j.error); body();
+    })
+    .catch(function (e) { live[key] = { state: 'error', msg: 'The live map lookup failed (' + e.message + ').' }; if (then) then(null, live[key].msg); body(); });
+}
 
 function approvedSites(skipId) {
   if (!S.run) return [];
@@ -84,7 +100,7 @@ function sourcesHtml() {
     '<li>Pin centres: All India Pincode Directory, Department of Posts via data.gov.in (Government Open Data Licence - India), mean of each pin\'s post offices after dropping misplaced ones.</li>' +
     '<li>Crowd is an estimate built from residents and mapped places. It is not measured footfall.</li>' +
     '<li>Pin areas are approximate: each hexagon goes to the nearest pin centre. Real pin boundaries are not published as open data.</li>' +
-    '<li>Everything is precomputed; the page makes no map or data requests while you use it.</li></ul></details>';
+    '<li>The 7 cities are precomputed and need no connection. Any other pin or place is looked up live through this site\'s own server: location from the pin directory (or OpenStreetMap\'s Nominatim if the pin is missing), places from OpenStreetMap through Overpass. Live areas have no residents data, so their crowd is daytime activity only. Each lookup is cached for a week.</li></ul></details>';
 }
 function chipsHtml() {
   if (!S.run) return '';
@@ -92,15 +108,19 @@ function chipsHtml() {
   return zones.length ? '<div class="sf-chips"><span class="muted sm">Search zones:</span>' + zones.map(function (a) { return '<button class="chip" data-act="geo-app" data-v="' + esc(a.id) + '">' + esc(a.id) + ' ' + esc(a.pin) + ' ' + (S.run.res[a.id].outcome === 'Approve' ? '(approved)' : '(needs a space)') + '</button>'; }).join('') + '</div>' : '';
 }
 function tabHtml() {
-  var head = '<div class="sf-head"><div><h3>Site finder</h3><p class="muted sm">Enter a pin code to see where inside it to look for a shop, and why.</p></div>' +
-    '<div class="sf-q"><input id="geo-pin" inputmode="numeric" maxlength="6" placeholder="Pin code, e.g. 575002" value="' + esc(V.pin) + '" aria-label="Pin code"><button class="btn sm primary" data-act="geo-go">Find sites</button></div></div>' + chipsHtml();
-  var body = '';
-  if (V.pin) {
+  var head = '<div class="sf-head"><div><h3>Site finder</h3><p class="muted sm">Enter any pin code or place in India to see where inside it to look for a shop, and why.</p></div>' +
+    '<div class="sf-q"><input id="geo-pin" maxlength="60" placeholder="Pin or place, e.g. 575002 or Hosapete" value="' + esc(V.query || V.pin) + '" aria-label="Pin code or place"><button class="btn sm primary" data-act="geo-go">Find sites</button></div></div>' + chipsHtml();
+  var body = '', lv = V.query ? live[V.query] : V.pin ? live[V.pin] : null;
+  if (lv && lv.state === 'loading') body = '<div class="sf-box sf-wait"><p><b>Looking up ' + esc(V.query || 'pin ' + V.pin) + ' on the live map (OpenStreetMap).</b></p><p class="muted sm">The first lookup of a place can take up to a minute because the public map servers are busy; after that it is instant.</p></div>';
+  else if (lv && lv.state === 'error') body = '<div class="sf-box"><p><b>' + esc(lv.msg) + '</b></p>' + fallback() + '<button class="btn sm" data-act="geo-retry">Try again</button></div>';
+  else if (V.pin) {
     var r = rec(V.pin, V.who);
-    if (!r.ok) body = '<div class="sf-box"><p><b>' + esc(r.why) + '</b></p>' + fallback() + '</div>';
-    else body = '<div class="sf-main"><div class="sf-map">' + mapSvg(r) + '</div><div class="sf-side"><p class="sf-sub">' + (V.who ? esc(V.who) + ': ' : '') + 'pin ' + esc(r.pin) + ', ' + esc(r.city) + ' (' + esc(r.tier) + '), ' + r.cells.length + ' hexagons' + (r.osm ? '' : '. <b>Residents only</b>: map data was not loaded for this city') + '.</p><ol class="sf-picks">' + picksHtml(r) + '</ol>' +
+    if (!r.ok && !Geo.pinInfo(V.pin) && canFetch()) { lookup(V.pin, true); return tabHtml(); }
+    if (!r.ok) body = '<div class="sf-box"><p><b>' + esc(r.why) + '</b></p>' + (canFetch() ? '' : '<p class="muted sm">Pins outside the 7 built-in cities are looked up live on the hosted page.</p>') + fallback() + '</div>';
+    else body = (r.live ? '<p class="sf-live"><b>Live map data</b> for ' + esc(r.label) + '. Location from ' + esc(r.source) + '; places from OpenStreetMap, fetched ' + esc(Geo.data.cities[r.city].fetched) + '. Crowd here is daytime activity only: residents data covers the 7 built-in cities. Catchment uses the Tier 2 setting.</p>' : '') +
+      '<div class="sf-main"><div class="sf-map">' + mapSvg(r) + '</div><div class="sf-side"><p class="sf-sub">' + (V.who ? esc(V.who) + ': ' : '') + 'pin ' + esc(r.pin) + ', ' + esc(r.live ? r.label.split(',').slice(-4, -2).join(',') || r.city : r.city) + ' (' + esc(r.tier) + '), ' + r.cells.length + ' hexagons' + (r.basis ? '. <b>' + esc(r.basis.charAt(0).toUpperCase() + r.basis.slice(1)) + '</b>' : '') + '.</p><ol class="sf-picks">' + picksHtml(r) + '</ol>' +
       '<button class="btn sm" data-act="geo-brief">Copy search brief</button></div></div>';
-  } else body = '<p class="muted pad">Pick a search zone above or type a pin code.</p>';
+  } else body = '<p class="muted pad">Pick a search zone above, or type any pin code or place in India.</p>';
   return '<div class="sf">' + head + body + assumptionsHtml() + sanityHtml() + sourcesHtml() + '</div>';
 }
 window.DeskExt.tabs.push({ id: 'sites', label: 'Site finder', render: tabHtml });
@@ -124,13 +144,26 @@ window.DeskExt.answerers.push(function (text) {
   var low = text.toLowerCase();
   if (!/\b(where|site|location|spot|place to|look for|search zone|which part|best area|open a store|open in)\b/.test(low)) return null;
   var pm = text.match(/\b(\d{6})\b/), idm = text.match(/\bAPP-\d+/i), a = idm ? D.getApp(D.findIds(text)[0]) : null;
-  var pin = pm ? pm[1] : a ? a.pin : null; if (!pin) return null;
+  var pin = pm ? pm[1] : a ? a.pin : null;
+  var place = !pin && (text.match(/\b(?:in|at|near|around)\s+([A-Za-z][A-Za-z .'-]{2,40}?)\s*\??$/) || [])[1];
+  if (!pin && !place) return null;
+  if (place || !Geo.pinInfo(pin)) {
+    if (!canFetch()) return pin ? '<p>' + esc(rec(pin).why) + '</p>' + fallback() : null;
+    lookup(place || pin, !place, function (res, err) {
+      S.askLog.push({ who: 'desk', html: res ? answerFor(res.pin, a) : '<p>' + esc(err || 'The live lookup failed.') + '</p>' + fallback() });
+      D.rerender();
+    });
+    return '<p>Looking up ' + esc(place || 'pin ' + pin) + ' on the live map (OpenStreetMap). The first lookup of a place can take up to a minute; the answer will appear here.</p>';
+  }
+  return answerFor(pin, a);
+});
+function answerFor(pin, a) {
   var r = rec(pin, a ? a.id : null);
   if (!r.ok) return '<p>' + esc(r.why) + '</p>' + fallback();
-  return '<p>Where to look in pin <b>' + esc(pin) + '</b> (' + esc(r.city) + ')' + (a ? ' for ' + esc(a.id) + ' ' + esc(a.name) : '') + ':</p><ol class="diff">' +
+  return '<p>Where to look in pin <b>' + esc(pin) + '</b> (' + esc(r.live ? r.label.split(',').slice(0, 3).join(',') : r.city) + ')' + (a ? ' for ' + esc(a.id) + ' ' + esc(a.name) : '') + ':</p><ol class="diff">' +
     r.top.map(function (t) { return '<li><b>' + t.rank + '.</b> ' + esc(t.landmarks[0] ? 'Near ' + t.landmarks[0] : t.lat.toFixed(4) + ', ' + t.lon.toFixed(4)) + ': crowd potential ' + Math.round(t.potential) + ', ' + Math.round(100 * t.overlap) + '% overlap' + (t.nearest ? ', ' + esc(t.nearest.id) + ' ' + t.nearest.km.toFixed(1) + ' km away' : '') + '</li>'; }).join('') +
-    '</ol><button class="link" data-act="' + (a ? 'geo-app" data-v="' + esc(a.id) : 'geo-open" data-v="' + esc(pin)) + '">Open in Site finder</button>';
-});
+    '</ol>' + (r.live ? '<p class="nx">Live map data: daytime activity from OpenStreetMap only.</p>' : '') + '<button class="link" data-act="' + (a ? 'geo-app" data-v="' + esc(a.id) : 'geo-open" data-v="' + esc(pin)) + '">Open in Site finder</button>';
+}
 
 /* ---------- events ---------- */
 function show(pin, who) { V.pin = pin; V.who = who || null; S.tab = 'sites'; D.rerender(); var t = document.querySelector('.tabs'); if (t && t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -138,7 +171,8 @@ function body() { var b = document.getElementById('tabbody'); if (b && S.tab ===
 document.addEventListener('click', function (e) {
   var el = e.target.closest && e.target.closest('[data-act^="geo-"]'); if (!el) return;
   var act = el.getAttribute('data-act'), v = el.getAttribute('data-v');
-  if (act === 'geo-go') { var p = (document.getElementById('geo-pin').value || '').replace(/\D/g, ''); V.pin = p; V.who = null; body(); }
+  if (act === 'geo-go') go(document.getElementById('geo-pin').value);
+  else if (act === 'geo-retry') { var k = V.query || V.pin; delete live[k]; if (V.query) lookup(V.query, false); body(); }
   else if (act === 'geo-open') show(v, null);
   else if (act === 'geo-app') { var a = D.getApp(v); if (a) show(a.pin, a.id); }
   else if (act === 'geo-reset') { V.cfg = Geo.clone(Geo.DEFAULTS); body(); }
@@ -148,7 +182,15 @@ document.addEventListener('click', function (e) {
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, done); else done();
   }
 });
-document.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target && e.target.id === 'geo-pin') { V.pin = e.target.value.replace(/\D/g, ''); V.who = null; body(); } });
+document.addEventListener('keydown', function (e) { if (e.key === 'Enter' && e.target && e.target.id === 'geo-pin') go(e.target.value); });
+// a 6-digit pin goes straight in; anything else is a place name, looked up live
+function go(text) {
+  var t = String(text || '').trim(), pin = t.replace(/\D/g, '');
+  V.who = null;
+  if (/^\d{6}$/.test(pin) && pin.length === t.replace(/\s/g, '').length) { V.pin = pin; V.query = ''; }
+  else if (t.length >= 3) { V.query = t; V.pin = ''; if (canFetch()) lookup(t, false); else live[t] = { state: 'error', msg: 'Place names are looked up live on the hosted page; here, type a pin code from the 7 built-in cities.' }; }
+  body();
+}
 document.addEventListener('change', function (e) {
   var path = e.target.getAttribute && e.target.getAttribute('data-geo'); if (!path) return;
   var v = parseFloat(e.target.value); if (isNaN(v) || v < 0) return;

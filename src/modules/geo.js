@@ -31,19 +31,27 @@ function city(name, cfg) {
   var actRaw = d.act.map(function (c) { var s = 0; c.forEach(function (x, k) { s += x * (cfg.act[K[k]] || 0); }); return s; });
   var scale = function (xs) { var top = pctl(xs.slice().sort(function (a, b) { return a - b; }), 0.95) || 1; return xs.map(function (x) { return Math.min(100, 100 * x / top); }); };
   var res = scale(d.pop), act = d.osm ? scale(actRaw) : res.map(function () { return 0; });
-  var share = d.osm ? cfg.residentShare : 1;
+  var share = !d.osm ? 1 : d.residents === false ? 0 : cfg.residentShare;   // live areas have no residents data
   var crowd = res.map(function (r, i) { return share * r + (1 - share) * act[i]; });
   var potRaw = crowd.map(function (c, i) {
     var s = c; d.r1[i].forEach(function (j) { s += cfg.ring1 * crowd[j]; }); d.r2[i].forEach(function (j) { s += cfg.ring2 * crowd[j]; }); return s;
   });
   var maxP = Math.max.apply(null, potRaw) || 1;
   var pins = {}; d.pin.forEach(function (p, i) { if (p) (pins[p] = pins[p] || []).push(i); });
-  var c = { name: name, d: d, n: n, ll: ll, res: res, act: act, crowd: crowd, potential: potRaw.map(function (p) { return 100 * p / maxP; }), pins: pins, osm: d.osm,
+  var c = { name: name, d: d, n: n, ll: ll, res: res, act: act, crowd: crowd, potential: potRaw.map(function (p) { return 100 * p / maxP; }), pins: pins, osm: d.osm, live: !!d.live,
+            basis: !d.osm ? 'residents only' : d.residents === false ? 'daytime activity only' : '',
             tier: E && E.CITIES[name] ? E.CITIES[name].tier : 'Tier 2' };
   cache[key] = c;
   return c;
 }
 function pinInfo(pin) { return G && G.pins[pin] ? G.pins[pin] : null; }
+// Adds an area looked up live (api/place.js): same shape as a built-in city, so everything else works unchanged.
+function addArea(resp) {
+  if (!G || !resp || !resp.area) return;
+  G.cities[resp.name] = resp.area;
+  Object.keys(resp.pins).forEach(function (p) { if (!G.pins[p] || p === resp.pin) G.pins[p] = resp.pins[p]; });
+  Object.keys(cache).forEach(function (k) { if (k.indexOf(resp.name) === 0) delete cache[k]; });
+}
 function cellAt(c, lat, lon) { var best = -1, bd = 1e9; for (var i = 0; i < c.n; i++) { var dd = km(c.ll[i], [lat, lon]); if (dd < bd) { bd = dd; best = i; } } return bd < 1 ? best : -1; }
 
 /* ---------- stores and competition ---------- */
@@ -57,11 +65,11 @@ function sites(extra) {
 // Share of the crowd within the catchment of cell i that is already within reach of another site.
 function overlap(c, i, R, ss, skipId) {
   var tot = 0, cov = 0, near = null;
-  ss.forEach(function (s) { if (s.id === skipId || s.city !== c.name) return; var dd = km(c.ll[i], [s.lat, s.lon]); if (!near || dd < near.km) near = { id: s.id, kind: s.kind, km: dd }; });
+  ss.forEach(function (s) { if (s.id === skipId) return; var dd = km(c.ll[i], [s.lat, s.lon]); if (dd <= 50 && (!near || dd < near.km)) near = { id: s.id, kind: s.kind, km: dd }; });
   for (var j = 0; j < c.n; j++) {
     if (km(c.ll[i], c.ll[j]) > R) continue;
     tot += c.crowd[j];
-    if (ss.some(function (s) { return s.id !== skipId && s.city === c.name && km(c.ll[j], [s.lat, s.lon]) <= R; })) cov += c.crowd[j];
+    if (ss.some(function (s) { return s.id !== skipId && km(c.ll[j], [s.lat, s.lon]) <= R; })) cov += c.crowd[j];
   }
   return { share: tot ? cov / tot : 0, nearest: near };
 }
@@ -91,7 +99,8 @@ function recommend(pin, cfg, extraSites, opts) {
   if (top.length < 3) ranked.forEach(function (x) { if (top.length < 3 && top.indexOf(x) < 0) top.push(x); });
   var byPot = cells.slice().sort(function (a, b) { return c.potential[b] - c.potential[a]; });
   top.forEach(function (t, k) { t.rank = k + 1; t.potRank = byPot.indexOf(t.i) + 1; t.reason = reason(t, c, R, cells.length); });
-  return { pin: pin, ok: true, city: c.name, tier: c.tier, radius: R, cells: cells, ranked: ranked, top: top, osm: c.osm, sites: ss.filter(function (s) { return s.city === c.name; }) };
+  return { pin: pin, ok: true, city: c.name, tier: c.tier, radius: R, cells: cells, ranked: ranked, top: top, osm: c.osm, live: c.live, basis: c.basis, label: c.d.label || '', source: c.d.source || '',
+           sites: ss.filter(function (s) { return km([p.lat, p.lon], [s.lat, s.lon]) <= 50; }) };
 }
 function placesIn(c, i) {
   var K = G.meta.kinds, a = c.d.act[i], out = [];
@@ -101,10 +110,10 @@ function placesIn(c, i) {
 }
 function reason(t, c, R, nCells) {
   var bits = [];
-  bits.push('Crowd potential (this hexagon plus its neighbours) ranks ' + t.potRank + ' of ' + nCells + ' in this pin; the hexagon itself is busier than ' + t.crowdPct + '% of the pin (estimated crowd ' + Math.round(t.crowd) + ' of 100' + (c.osm ? '' : ', residents only') + ').');
+  bits.push('Crowd potential (this hexagon plus its neighbours) ranks ' + t.potRank + ' of ' + nCells + ' in this pin; the hexagon itself is busier than ' + t.crowdPct + '% of the pin (estimated crowd ' + Math.round(t.crowd) + ' of 100' + (c.basis ? ', ' + c.basis : '') + ').');
   if (t.strong) bits.push(t.strong + ' of its 6 neighbouring hexagons are among the busiest quarter of ' + c.name + '.');
   if (t.nearest) bits.push('Nearest ' + (t.nearest.kind === 'store' ? 'store' : 'approved partner') + ' ' + t.nearest.id + ' is ' + t.nearest.km.toFixed(1) + ' km away; ' + Math.round(100 * t.overlap) + '% of the crowd within ' + R + ' km is already within its reach.');
-  else bits.push('No store or approved partner within this city yet, so no catchment overlap.');
+  else bits.push('No store or approved partner within 50 km, so no catchment overlap.');
   if (t.landmarks.length) bits.push('Near ' + t.landmarks.join(', ') + '.');
   return bits;
 }
@@ -130,7 +139,7 @@ function baseline(cfg) {
   var storePins = {}; (E ? E.STORES : []).forEach(function (s) { storePins[s.pin] = 1; });
   var tops = [];
   Object.keys(G.pins).forEach(function (p) {
-    if (storePins[p]) return;
+    if (storePins[p] || (G.cities[G.pins[p].city] || {}).live) return;   // built-in cities only
     var info = G.pins[p], c = city(info.city, cfg), i = cellAt(c, info.lat, info.lon);
     if (i >= 0) tops.push(Math.round(100 * (c.potential.filter(function (v) { return v > c.potential[i]; }).length + 1) / c.n));
   });
@@ -152,7 +161,7 @@ function brief(rec, who) {
   return lines.join('\n');
 }
 
-var api = { DEFAULTS: DEFAULTS, clone: clone, km: km, city: city, pinInfo: pinInfo, sites: sites, overlap: overlap, recommend: recommend, backtest: backtest, baseline: baseline, brief: brief, data: G };
+var api = { DEFAULTS: DEFAULTS, clone: clone, km: km, city: city, pinInfo: pinInfo, sites: sites, overlap: overlap, recommend: recommend, backtest: backtest, baseline: baseline, brief: brief, addArea: addArea, data: G };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.DeskGeo = api;
 })(typeof window !== 'undefined' ? window : globalThis);

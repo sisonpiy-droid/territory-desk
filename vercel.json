@@ -1,6 +1,11 @@
 {
   "buildCommand": "node build.js",
-  "installCommand": "echo no runtime dependencies",
+  "installCommand": "npm install --omit=dev",
   "outputDirectory": "dist",
-  "framework": null
+  "framework": null,
+  "functions": {
+    "api/place.js": {
+      "maxDuration": 60
+    }
+  }
 }
