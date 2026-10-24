@@ -56,7 +56,7 @@ function load(appsAoA, tersAoA, label) {
   S.undo = []; S.changed = {}; S.open = {}; S.prevSnap = null; S.askLog = []; S.label = label || '';
   S.initial = E.clone({ apps: apps, ters: ters });
   recompute(true);
-  S.tab = 'decisions'; S.filter = 'all'; S.q = '';
+  S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.filterIds = null;
   render();
 }
 
@@ -161,11 +161,13 @@ function decisionsHtml() {
   }).join('');
   var rows = S.apps.filter(function (a) {
     var r = S.run.res[a.id], o = a.withdrawn ? 'Withdrawn' : r.outcome;
+    if (S.filterIds && S.filterIds.indexOf(a.id) < 0) return false;
     if (S.filter !== 'all' && o !== S.filter) return false;
     if (q && (a.id + ' ' + a.name + ' ' + a.pin + ' ' + a.city).toLowerCase().indexOf(q) < 0) return false;
     return true;
   }).map(rowHtml).join('');
-  return '<div class="toolbar"><div class="chips">' + chips + '</div>' +
+  var only = S.filterIds ? '<p class="only">Showing ' + esc(S.filterLabel || 'a selection') + ' (' + S.filterIds.length + '). <button class="link" data-act="clear-ids">Show all</button></p>' : '';
+  return only + '<div class="toolbar"><div class="chips">' + chips + '</div>' +
     '<input id="q" class="search" type="search" placeholder="Search ID, name, pin, city" value="' + esc(S.q) + '" aria-label="Search applications"></div>' +
     '<div class="rows">' + (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
 }
@@ -639,7 +641,8 @@ document.addEventListener('click', function (e) {
     case 'dl-sample': downloadSample(); break;
     case 'export': exportDecisions(); break;
     case 'tab': S.tab = v; render(); break;
-    case 'filter': S.filter = v; S.tab = 'decisions'; render(); break;
+    case 'clear-ids': S.filterIds = null; refreshBody(); break;
+    case 'filter': S.filterIds = null; S.filter = v; S.tab = 'decisions'; render(); break;
     case 'toggle': S.open[v] = !S.open[v]; refreshBody(); break;
     case 'lang': S.letterLang[el.getAttribute('data-id')] = v; refreshBody(); break;
     case 'copy': {
@@ -649,8 +652,8 @@ document.addEventListener('click', function (e) {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, done);
       else { var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (x) {} document.body.removeChild(ta); done(); }
       break; }
-    case 'pin': S.tab = 'decisions'; S.filter = 'all'; S.q = v; render(); break;
-    case 'open-app': S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.open[v] = true; render();
+    case 'pin': S.filterIds = null; S.tab = 'decisions'; S.filter = 'all'; S.q = v; render(); break;
+    case 'open-app': S.filterIds = null; S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.open[v] = true; render();
       var row = document.getElementById('row-' + v); if (row) row.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
     case 'ask': { var i = $('#askin'); ask(i.value); break; }
     case 'sugg': ask(v); break;

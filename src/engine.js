@@ -696,7 +696,8 @@ var api = {
   CITIES: CITIES, STORES: STORES, DEFAULT_CFG: DEFAULT_CFG, NEAREST_CITY: NEAREST_CITY,
   parseApplications: parseApplications, parseTerritories: parseTerritories,
   evaluateApp: evaluateApp, run: run, explain: explain, onboardingPlan: onboardingPlan, letter: letter,
-  freePins: freePins, clone: clone, canonCity: canonCity, num: num, strengths: strengths, pad: pad
+  freePins: freePins, clone: clone, canonCity: canonCity, num: num, strengths: strengths, pad: pad,
+  ASK: ASK, LANGKEY: LANGKEY, fill: fill
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.Engine = api;

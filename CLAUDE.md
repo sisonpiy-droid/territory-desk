@@ -36,7 +36,8 @@ Submission closes Monday 26 Oct 2026, morning. Feature freeze Sunday 6 pm. The l
 - src/ui.js: state S, rendering, the Ask box (parseFields, answer), what-if updates, workbook import and export.
 - src/sample.js: 20 sample applicants and 9 territories with planted traps.
 - src/template.html: styles and shell. Design tokens on :root with light and dark values.
-- test/run.js: expected outcomes for the sample and key scenarios. test/file.js: the judges-layout workbook. test/ui-smoke.js: page loads, follow-ups answer, no script errors.
+- src/modules/ops.js + src/ext/ops-view.js: operations view above the list (pipeline and leakage, worklist, territory health, before and after with editable minutes, adoption metrics). Pipeline clicks filter the list via S.filterIds. Overrides (Phase 2) should live in S.overrides so the adoption metric counts them.
+- test/run.js: expected outcomes for the sample and key scenarios. test/file.js: the judges-layout workbook. test/ops.js: operations view numbers. test/shots.js: Playwright screenshots (1360/390, light/dark). test/ui-smoke.js: page loads, follow-ups answer, no script errors.
 
 ## Adding features without merge conflicts
 Two people work in parallel. Put pure logic in src/modules/*.js (loaded before ui.js) and UI in src/ext/*.js (loaded after). build.js inlines them in order: engine, sample, modules, ui, ext. Hook in through window.DeskExt: afterSummary (functions returning HTML shown above the tabs), tabs ({id, label, render}), afterRender, answerers (functions tried first by the Ask box; return HTML or null). window.__desk exposes S, E, ask, rerender, recompute, getApp, esc, pill, pushUndo, getRun.
