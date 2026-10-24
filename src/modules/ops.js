@@ -117,7 +117,7 @@ function worklist(S) {
 var ALT = {
   en: 'Dear {name}, about your application {id}: pin code {pin} is not available, but we have an open place in pin code {alt} ({city}). If you can find a ground-floor or mall space there, we can take your application forward. Please reply to let us know.',
   hi: 'प्रिय {name}, आपके आवेदन {id} के बारे में: पिन कोड {pin} उपलब्ध नहीं है, लेकिन पिन कोड {alt} ({city}) में हमारे पास जगह खाली है। अगर आप वहाँ ग्राउंड फ्लोर या मॉल में दुकान ढूँढ सकें, तो हम आपका आवेदन आगे बढ़ा सकते हैं। कृपया जवाब देकर बताएँ।',
-  kn: 'ಆತ್ಮೀಯ {name}, ನಿಮ್ಮ ಅರ್ಜಿ {id} ಕುರಿತು: ಪಿನ್ ಕೋಡ್ {pin} ಲಭ್ಯವಿಲ್ಲ, ಆದರೆ ಪಿನ್ ಕೋಡ್ {alt} ({city}) ನಲ್ಲಿ ನಮ್ಮಲ್ಲಿ ಸ್ಥಾನ ಖಾಲಿ ಇದೆ. ಅಲ್ಲಿ ನೆಲ ಮಹಡಿ ಅಥವಾ ಮಾಲ್‌ನಲ್ಲಿ ಜಾಗ ಸಿಕ್ಕರೆ, ನಿಮ್ಮ ಅರ್ಜಿಯನ್ನು ಮುಂದುವರಿಸಬಹುದು. ದಯವಿಟ್ಟು ಉತ್ತರಿಸಿ ತಿಳಿಸಿ.'
+  kn: 'ಆತ್ಮೀಯ {name}, ನಿಮ್ಮ ಅರ್ಜಿ {id} ಕುರಿತು: ಪಿನ್ ಕೋಡ್ {pin} ಲಭ್ಯವಿಲ್ಲ, ಆದರೆ ಪಿನ್ ಕೋಡ್ {alt} ({city}) ನಲ್ಲಿ ನಮ್ಮಲ್ಲಿ ಸ್ಥಾನ ಖಾಲಿ ಇದೆ. ಅಲ್ಲಿ ನೆಲ ಮಹಡಿ ಅಥವಾ ಮಾಲ್‌ನಲ್ಲಿ ಜಾಗ ಸಿಕ್ಕರೆ, ನಿಮ್ಮ ಅರ್ಜಿಯನ್ನು ಮುಂದುವರಿಸಬಹುದು. ದಯವಿಟ್ಟು ನಮಗೆ ಉತ್ತರಿಸಿ.'
 };
 function message(S, m, lang) {
   var a = S.apps.filter(function (x) { return x.id === m.id; })[0], r = S.run.res[m.id];

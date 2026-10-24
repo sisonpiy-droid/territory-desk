@@ -961,7 +961,7 @@ function letter(r, a, lang, cfg) {
     var asks = r.issues.filter(function (i) { return i.level === 'hold' && ASK[i.code]; }).map(function (i) {
       return fill(ASK[i.code][L], { min: cfg.minSpace, need: i.need || '' });
     });
-    m.ask = asks.join('; ') || { en: 'a short call with our team to complete a few checks', hi: 'हमारी टीम के साथ एक छोटी कॉल, ताकि कुछ जाँच पूरी हो सकें', kn: 'ಕೆಲವು ಪರಿಶೀಲನೆಗಳನ್ನು ಪೂರ್ಣಗೊಳಿಸಲು ನಮ್ಮ ತಂಡದೊಂದಿಗೆ ಒಂದು ಸಣ್ಣ ಕರೆ' }[L];
+    m.ask = asks.join('; ') || { en: 'a convenient time for a short call with our team to complete a few checks', hi: 'हमारी टीम के साथ एक छोटी कॉल के लिए आपका सुविधाजनक समय, ताकि कुछ जाँच पूरी हो सकें', kn: 'ಕೆಲವು ಪರಿಶೀಲನೆಗಳನ್ನು ಪೂರ್ಣಗೊಳಿಸಲು ನಮ್ಮ ತಂಡದೊಂದಿಗೆ ಸಣ್ಣ ಕರೆಗೆ ನಿಮಗೆ ಅನುಕೂಲವಾದ ಸಮಯ' }[L];
   }
   if (r.outcome === 'Reject') {
     var rj = r.issues.filter(function (i) { return i.level === 'reject'; })[0];
@@ -1154,7 +1154,7 @@ function worklist(S) {
 var ALT = {
   en: 'Dear {name}, about your application {id}: pin code {pin} is not available, but we have an open place in pin code {alt} ({city}). If you can find a ground-floor or mall space there, we can take your application forward. Please reply to let us know.',
   hi: 'प्रिय {name}, आपके आवेदन {id} के बारे में: पिन कोड {pin} उपलब्ध नहीं है, लेकिन पिन कोड {alt} ({city}) में हमारे पास जगह खाली है। अगर आप वहाँ ग्राउंड फ्लोर या मॉल में दुकान ढूँढ सकें, तो हम आपका आवेदन आगे बढ़ा सकते हैं। कृपया जवाब देकर बताएँ।',
-  kn: 'ಆತ್ಮೀಯ {name}, ನಿಮ್ಮ ಅರ್ಜಿ {id} ಕುರಿತು: ಪಿನ್ ಕೋಡ್ {pin} ಲಭ್ಯವಿಲ್ಲ, ಆದರೆ ಪಿನ್ ಕೋಡ್ {alt} ({city}) ನಲ್ಲಿ ನಮ್ಮಲ್ಲಿ ಸ್ಥಾನ ಖಾಲಿ ಇದೆ. ಅಲ್ಲಿ ನೆಲ ಮಹಡಿ ಅಥವಾ ಮಾಲ್‌ನಲ್ಲಿ ಜಾಗ ಸಿಕ್ಕರೆ, ನಿಮ್ಮ ಅರ್ಜಿಯನ್ನು ಮುಂದುವರಿಸಬಹುದು. ದಯವಿಟ್ಟು ಉತ್ತರಿಸಿ ತಿಳಿಸಿ.'
+  kn: 'ಆತ್ಮೀಯ {name}, ನಿಮ್ಮ ಅರ್ಜಿ {id} ಕುರಿತು: ಪಿನ್ ಕೋಡ್ {pin} ಲಭ್ಯವಿಲ್ಲ, ಆದರೆ ಪಿನ್ ಕೋಡ್ {alt} ({city}) ನಲ್ಲಿ ನಮ್ಮಲ್ಲಿ ಸ್ಥಾನ ಖಾಲಿ ಇದೆ. ಅಲ್ಲಿ ನೆಲ ಮಹಡಿ ಅಥವಾ ಮಾಲ್‌ನಲ್ಲಿ ಜಾಗ ಸಿಕ್ಕರೆ, ನಿಮ್ಮ ಅರ್ಜಿಯನ್ನು ಮುಂದುವರಿಸಬಹುದು. ದಯವಿಟ್ಟು ನಮಗೆ ಉತ್ತರಿಸಿ.'
 };
 function message(S, m, lang) {
   var a = S.apps.filter(function (x) { return x.id === m.id; })[0], r = S.run.res[m.id];

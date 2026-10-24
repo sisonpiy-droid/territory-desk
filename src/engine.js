@@ -716,7 +716,7 @@ function letter(r, a, lang, cfg) {
     var asks = r.issues.filter(function (i) { return i.level === 'hold' && ASK[i.code]; }).map(function (i) {
       return fill(ASK[i.code][L], { min: cfg.minSpace, need: i.need || '' });
     });
-    m.ask = asks.join('; ') || { en: 'a short call with our team to complete a few checks', hi: 'हमारी टीम के साथ एक छोटी कॉल, ताकि कुछ जाँच पूरी हो सकें', kn: 'ಕೆಲವು ಪರಿಶೀಲನೆಗಳನ್ನು ಪೂರ್ಣಗೊಳಿಸಲು ನಮ್ಮ ತಂಡದೊಂದಿಗೆ ಒಂದು ಸಣ್ಣ ಕರೆ' }[L];
+    m.ask = asks.join('; ') || { en: 'a convenient time for a short call with our team to complete a few checks', hi: 'हमारी टीम के साथ एक छोटी कॉल के लिए आपका सुविधाजनक समय, ताकि कुछ जाँच पूरी हो सकें', kn: 'ಕೆಲವು ಪರಿಶೀಲನೆಗಳನ್ನು ಪೂರ್ಣಗೊಳಿಸಲು ನಮ್ಮ ತಂಡದೊಂದಿಗೆ ಸಣ್ಣ ಕರೆಗೆ ನಿಮಗೆ ಅನುಕೂಲವಾದ ಸಮಯ' }[L];
   }
   if (r.outcome === 'Reject') {
     var rj = r.issues.filter(function (i) { return i.level === 'reject'; })[0];
