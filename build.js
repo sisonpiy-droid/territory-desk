@@ -10,4 +10,6 @@ const body = order.map(f => '<script>\n/* ' + f + ' */\n' + fs.readFileSync(dir(
 let html = fs.readFileSync(dir('template.html'), 'utf8').replace('/*SCRIPTS*/', () => body);
 fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'dist', 'index.html'), html);
+// SheetJS is served from the same site, never a CDN
+fs.copyFileSync(path.join(__dirname, 'vendor', 'xlsx.full.min.js'), path.join(__dirname, 'dist', 'xlsx.full.min.js'));
 console.log('built dist/index.html from ' + order.join(', ') + ' (' + html.length + ' bytes)');

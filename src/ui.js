@@ -570,7 +570,7 @@ function ask(text) {
   text = String(text || '').trim(); if (!text) return;
   S.askLog.push({ who: 'me', text: text });
   var html;
-  S.cause = { kind: /what if/i.test(text) ? 'What-if' : 'New information', text: text };
+  S.cause = { kind: /\bwhat if\b/i.test(text) ? 'What-if' : 'New information', text: text };
   try { html = answer(text); } catch (e) { html = '<p>Something went wrong reading that: ' + esc(e.message) + '</p>'; }
   S.cause = null;
   S.askLog.push({ who: 'desk', html: html });
@@ -589,11 +589,12 @@ function handleFile(file) {
   rd.onload = function (ev) {
     try {
       var wb = XLSX.read(new Uint8Array(ev.target.result), { type: 'array' });
-      var names = wb.SheetNames, find = function (rx) { return names.filter(function (n) { return rx.test(n.toLowerCase()); })[0]; };
-      var an = find(/applic/) || names[0], tn = find(/territor/) || names[1];
-      if (!tn || tn === an) throw new Error('The workbook needs two sheets: Applications and Territories.');
-      var toAoA = function (n) { return XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }); };
-      load(toAoA(an), toAoA(tn), file.name);
+      var sheets = {};
+      wb.SheetNames.forEach(function (n) { sheets[n] = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }); });
+      var pk = E.pickSheets(sheets);
+      if (!E.parseApplications(pk.apps).length) throw new Error('The Applications sheet has a header row but no applications under it.');
+      if (!E.parseTerritories(pk.ters).length) throw new Error('The Territories sheet has a header row but no territories under it.');
+      load(pk.apps, pk.ters, file.name);
       hideError();
     } catch (e) { showError(e.message || String(e)); }
   };

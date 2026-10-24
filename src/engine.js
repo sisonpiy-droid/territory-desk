@@ -65,6 +65,14 @@ function num(v) {
   var m = String(v).replace(/,/g, '').match(/-?\d+(\.\d+)?/);
   return m ? parseFloat(m[0]) : null;
 }
+// Investment in Rs lakh, from 25, '25 lakh', '₹30L', '0.28 crore' or a full rupee amount like 'Rs 40,00,000'
+function lakh(v) {
+  var n = num(v); if (n === null) return null;
+  var s = String(v).toLowerCase();
+  if (/crore|\bcr\b/.test(s)) return Math.round(n * 10000) / 100;
+  if (/lakh|lac|\d\s*l\b/.test(s)) return n;
+  return n >= 10000 ? Math.round(n / 1000) / 100 : n;
+}
 function normHeader(s) { return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, ''); }
 function canonCity(v) {
   var s = String(v == null ? '' : v).trim();
@@ -78,14 +86,31 @@ function pad(n, w) { n = String(n); while (n.length < w) n = '0' + n; return n; 
 /* ------------------------------------------------------------------ */
 /* Reading the uploaded sheets (arrays of arrays in, records out)      */
 /* ------------------------------------------------------------------ */
-function findHeaderRow(aoa, firstKey) {
+var APP_KEYS = ['applicationid', 'applicationno', 'applicationnumber', 'appid', 'appno'];
+var TER_KEYS = ['territoryid', 'territoryno', 'territorycode', 'territory'];
+function findHeaderRow(aoa, keys) {
+  keys = [].concat(keys);
   for (var i = 0; i < Math.min(aoa.length, 15); i++) {
     var row = aoa[i] || [];
     for (var j = 0; j < row.length; j++) {
-      if (normHeader(row[j]).indexOf(firstKey) === 0) return i;
+      var h = normHeader(row[j]);
+      if (keys.some(function (k) { return h === k || (h.indexOf(k) === 0 && h.length <= k.length + 12); })) return i;
     }
   }
   return -1;
+}
+// Finds the Applications and Territories sheets by their header row, whatever the sheets are called.
+// sheets: { sheetName: arrayOfArrays }
+function pickSheets(sheets) {
+  var names = Object.keys(sheets), an = null, tn = null;
+  names.forEach(function (n) {
+    if (!an && findHeaderRow(sheets[n], APP_KEYS) >= 0) an = n;
+    else if (!tn && findHeaderRow(sheets[n], TER_KEYS) >= 0) tn = n;
+  });
+  var list = names.map(function (n) { return '"' + n.trim() + '"'; }).join(', ');
+  if (!an) throw new Error('No Applications sheet found: none of the sheets (' + list + ') has an "Application ID" column. Use the judges\' template layout.');
+  if (!tn) throw new Error('No Territories sheet found in this workbook (sheets: ' + list + '). Add a sheet with the columns Territory ID, City, State, Pin codes covered, City tier, Open slots, Priority.');
+  return { apps: sheets[an], ters: sheets[tn], appsName: an, tersName: tn };
 }
 function colFinder(headers) {
   var H = headers.map(normHeader);
@@ -132,16 +157,17 @@ function normPriority(v) {
 }
 
 function parseApplications(aoa) {
-  var hi = findHeaderRow(aoa, 'applicationid');
+  var hi = findHeaderRow(aoa, APP_KEYS);
   if (hi < 0) throw new Error('Could not find an "Application ID" header row in the Applications sheet.');
   var ci = colFinder(aoa[hi]);
   var C = {
-    id: ci('applicationid', 'appid'), name: ci('applicantname', 'name'), city: ci('city'), state: ci('state'),
-    pin: ci('pincode', 'pin'), invest: ci('investment'), exp: ci('retailexperience', 'experience'),
-    biz: ci('currentpastbusiness', 'currentbusiness', 'business'), space: ci('spaceavailable'),
-    size: ci('spacesize'), floor: ci('floor'), launch: ci('targetlaunch', 'launch'),
-    lang: ci('preferredlanguage', 'language'), notes: ci('notes')
+    id: ci.apply(null, APP_KEYS), name: ci('applicantname', 'nameofapplicant', 'applicantsname', 'fullname', 'name'), city: ci('city', 'town'), state: ci('state'),
+    pin: ci('pincode', 'pin', 'postalcode', 'postcode'), invest: ci('investment', 'capital', 'budget'), exp: ci('retailexperience', 'experience'),
+    biz: ci('currentpastbusiness', 'currentbusiness', 'business', 'occupation'), space: ci('spaceavailable', 'spacestatus', 'spaceownedrented', 'space', 'premises'),
+    size: ci('spacesize', 'sizeofspace', 'shopsize', 'size', 'area'), floor: ci('floor', 'whichfloor'), launch: ci('targetlaunch', 'launch', 'targetopening'),
+    lang: ci('preferredlanguage', 'language'), notes: ci('notes', 'applicantnotes', 'notesfromapplicant', 'remarks', 'comments')
   };
+  if (C.space >= 0 && C.space === C.size) C.space = -1;
   var out = [], seen = {};
   for (var r = hi + 1; r < aoa.length; r++) {
     var row = aoa[r];
@@ -157,7 +183,7 @@ function parseApplications(aoa) {
     var spaceRaw = String(cell(row, C.space)).trim();
     var a = {
       id: id, row: r + 1, name: name || id, city: city, state: String(cell(row, C.state)).trim(),
-      pin: pin, pinRaw: pinRaw, invest: num(cell(row, C.invest)), exp: num(cell(row, C.exp)),
+      pin: pin, pinRaw: pinRaw, invest: lakh(cell(row, C.invest)), exp: num(cell(row, C.exp)),
       biz: String(cell(row, C.biz)).trim(), space: normSpace(spaceRaw), spaceRaw: spaceRaw,
       size: num(cell(row, C.size)), floor: normFloor(cell(row, C.floor)),
       launch: num(cell(row, C.launch)), lang: normLang(cell(row, C.lang)),
@@ -171,11 +197,11 @@ function parseApplications(aoa) {
 }
 
 function parseTerritories(aoa) {
-  var hi = findHeaderRow(aoa, 'territoryid');
+  var hi = findHeaderRow(aoa, TER_KEYS);
   if (hi < 0) throw new Error('Could not find a "Territory ID" header row in the Territories sheet.');
   var ci = colFinder(aoa[hi]);
-  var C = { id: ci('territoryid'), city: ci('city'), state: ci('state'), pins: ci('pincodes', 'pincode', 'pin'),
-            tier: ci('citytier', 'tier'), slots: ci('openslots', 'slots'), priority: ci('priority') };
+  var C = { id: ci.apply(null, TER_KEYS), city: ci('city', 'town'), state: ci('state'), pins: ci('pincodes', 'pincode', 'pins', 'pin'),
+            tier: ci('citytier', 'tier'), slots: ci('openslots', 'slots', 'stores'), priority: ci('priority') };
   var out = [];
   for (var r = hi + 1; r < aoa.length; r++) {
     var row = aoa[r];
@@ -246,10 +272,12 @@ function evaluateApp(a, ctx) {
 
   /* ---- pin and territory ---- */
   if (!city) {
-    add('CITY_UNKNOWN', 'hold', 'City not recognised', '“' + a.city + '” is not one of the cities the brand serves.');
+    if (!a.city) add('CITY_UNKNOWN', 'hold', 'City missing', 'The city was left blank.');
+    else add('CITY_UNKNOWN', 'hold', 'City not recognised', '“' + a.city + '” is not one of the cities the brand serves.');
   }
   if (!validPin) {
-    add('PIN_BAD', 'hold', 'Invalid pin code', 'Pin code “' + a.pinRaw + '” is not a 6-digit number.');
+    if (!a.pinRaw) add('PIN_BAD', 'hold', 'Pin code missing', 'The pin code was left blank.');
+    else add('PIN_BAD', 'hold', 'Invalid pin code', 'Pin code “' + a.pinRaw + '” is not a 6-digit number.');
   } else if (city && pin.indexOf(city.prefix) !== 0) {
     add('PIN_MISMATCH', 'hold', 'Pin code and city do not match',
         pin + ' does not start with ' + city.prefix + ', the prefix for ' + a.city + '. One of the two is wrong.');
@@ -731,7 +759,7 @@ function letter(r, a, lang, cfg) {
 
 var api = {
   CITIES: CITIES, STORES: STORES, DEFAULT_CFG: DEFAULT_CFG, NEAREST_CITY: NEAREST_CITY,
-  parseApplications: parseApplications, parseTerritories: parseTerritories,
+  parseApplications: parseApplications, parseTerritories: parseTerritories, pickSheets: pickSheets, lakh: lakh,
   evaluateApp: evaluateApp, run: run, explain: explain, onboardingPlan: onboardingPlan, letter: letter,
   freePins: freePins, clone: clone, canonCity: canonCity, num: num, strengths: strengths, pad: pad,
   ASK: ASK, LANGKEY: LANGKEY, fill: fill

@@ -6,7 +6,9 @@
 <title>Territory Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500&family=Noto+Sans+Kannada:wght@400;500&display=swap">
+<!-- Fonts load without blocking the page; if Google Fonts is unreachable, system fonts take over -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500&family=Noto+Sans+Kannada:wght@400;500&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500&family=Noto+Sans+Kannada:wght@400;500&display=swap"></noscript>
 <style>
 :root {
   --bg: #eef1f5; --surface: #ffffff; --surface2: #f5f7fa; --ink: #16202c; --muted: #5d6b7a; --line: #d8dee6;
@@ -135,8 +137,8 @@ p { margin: 0 0 8px; }
 .seg-b { background: var(--surface); border: 0; padding: 4px 12px; font-size: 13px; font-weight: 600; }
 .seg-b.on { background: var(--accent); color: var(--accent-ink); }
 .letter { background: var(--surface2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 14.5px; line-height: 1.6; margin-bottom: 8px; }
-.letter[lang="hi"] { font-family: 'Noto Sans Devanagari', var(--body); }
-.letter[lang="kn"] { font-family: 'Noto Sans Kannada', var(--body); }
+.letter[lang="hi"] { font-family: 'Noto Sans Devanagari', 'Nirmala UI', Mangal, 'Kohinoor Devanagari', 'Devanagari Sangam MN', var(--body); }
+.letter[lang="kn"] { font-family: 'Noto Sans Kannada', 'Nirmala UI', Tunga, 'Kannada Sangam MN', var(--body); }
 .rec { display: grid; grid-template-columns: 130px 1fr; gap: 3px 10px; font-size: 13.5px; margin: 0; }
 .rec dt { color: var(--muted); } .rec dd { margin: 0; }
 
@@ -240,7 +242,8 @@ button.tile:hover { transform: translateY(-1px); }
 <div id="err" role="alert" hidden></div>
 <main id="app"></main>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- SheetJS is served from this site (vendor/, copied by build.js) so a CDN outage cannot break uploads -->
+<script src="xlsx.full.min.js"></script>
 /*SCRIPTS*/
 </body>
 </html>
