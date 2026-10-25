@@ -9,7 +9,7 @@ var OUT_CLASS = { Approve: 'ok', Waitlist: 'wait', Hold: 'hold', Reject: 'no', W
 
 // Extension points so new features can live in their own files (src/modules/*.js load before this file, src/ext/*.js after it)
 window.DeskExt = window.DeskExt || {};
-['afterSummary', 'tabs', 'afterRender', 'answerers', 'afterDetail', 'afterRecompute', 'exportSheets', 'rowBadges'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
+['afterSummary', 'tabs', 'afterRender', 'answerers', 'afterDetail', 'afterRecompute', 'exportSheets', 'rowBadges', 'boardTerritory'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
 function extHtml() {
   return window.DeskExt.afterSummary.map(function (fn) { try { return fn(S) || ''; } catch (e) { return '<p class="muted pad">A section failed to load: ' + esc(e.message) + '</p>'; } }).join('');
 }
@@ -248,7 +248,8 @@ function boardHtml() {
       return '<button class="tile ' + cls + '" data-act="pin" data-v="' + p + '" title="' + esc(title) + '"><b>' + p.slice(0, 3) + '<u>' + p.slice(3) + '</u></b><span>' + esc(lab) + '</span>' + extra + '</button>';
     }).join('');
     parts.push('<section class="terr"><header><div><h3>' + esc(t.id) + ' ' + esc(t.city) + '</h3><span class="muted">' + esc(t.tier) + ', ' + esc(t.priority) + ' priority</span></div>' +
-      '<div class="slots" title="' + filled + ' of ' + t.slots + ' slots filled"><span class="dots">' + dots + '</span><small>' + filled + ' of ' + t.slots + ' slots</small></div></header><div class="tiles">' + tiles + '</div></section>');
+      '<div class="slots" title="' + filled + ' of ' + t.slots + ' slots filled"><span class="dots">' + dots + '</span><small>' + filled + ' of ' + t.slots + ' slots</small></div></header><div class="tiles">' + tiles + '</div>' +
+      window.DeskExt.boardTerritory.map(function (fn) { try { return fn(t, S) || ''; } catch (e) { return ''; } }).join('') + '</section>');
   });
   var outside = S.apps.filter(function (a) { return !a.withdrawn && !S.run.res[a.id].ter; });
   var out = outside.length ? '<section class="terr"><header><div><h3>Not on the board</h3><span class="muted">Pin code is outside every territory or could not be read</span></div></header><div class="outside">' +

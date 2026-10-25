@@ -4,3 +4,4 @@ shots/
 .vercel
 .env*
 dist/xlsx.full.min.js
+scripts/raw/

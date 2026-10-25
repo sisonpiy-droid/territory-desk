@@ -5,7 +5,8 @@
 const fs = require('fs'), path = require('path');
 const dir = p => path.join(__dirname, 'src', p);
 const list = d => (fs.existsSync(dir(d)) ? fs.readdirSync(dir(d)).filter(f => f.endsWith('.js')).sort().map(f => path.join(d, f)) : []);
-const order = ['engine.js', 'sample.js'].concat(list('modules'), ['ui.js'], list('ext'));
+// src/data/*.js: generated static data (e.g. the Site finder's hexagons from scripts/build-geo.js)
+const order = ['engine.js', 'sample.js'].concat(list('data'), list('modules'), ['ui.js'], list('ext'));
 const body = order.map(f => '<script>\n/* ' + f + ' */\n' + fs.readFileSync(dir(f), 'utf8').replace(/<\/script>/g, '<\\/script>') + '\n</script>').join('\n');
 let html = fs.readFileSync(dir('template.html'), 'utf8').replace('/*SCRIPTS*/', () => body);
 fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
