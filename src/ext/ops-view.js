@@ -101,7 +101,7 @@ function sync() {
 function view() {
   if (!S.run) return '';
   sync();
-  return '<section class="ops" aria-label="Operations view">' + pipeHtml() + '<div class="ops-grid">' + workHtml() + healthHtml() + '</div><div class="ops-grid">' + baHtml() + adoptHtml() + '</div></section>';
+  return '<section class="ops" aria-label="Operations view">' + pipeHtml() + (window.DeskCharts ? window.DeskCharts.html() : '') + '<div class="ops-grid">' + workHtml() + healthHtml() + '</div><div class="ops-grid">' + baHtml() + adoptHtml() + '</div></section>';
 }
 function todo() { var n = 0; O.worklist(S).forEach(function (g) { n += g.items.length; }); return n; }
 
