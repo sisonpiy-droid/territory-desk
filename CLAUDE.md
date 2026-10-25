@@ -75,6 +75,10 @@ Code is on GitHub (sisonpiy-droid/territory-desk). Vercel builds every push (ver
 - Record detail is split into sections: Why, Plan, Score and data, Message, Override. DeskExt.afterDetail entries are a function (shown under Why) or { group: 'why'|'plan'|'score'|'message'|'actions', fn }.
 - Rows use a container query on .main, so they switch to the compact layout when the page column is narrow.
 
+## Dashboard skin (25 Oct 2026)
+- Internal-tool look from the design canvas: dark top bar carrying the file name, black primary actions, neutral grey ground, outcome colours only for outcomes. Decisions is a table (ID, applicant, territory, outcome, score, why, next action) under outcome filter tiles and one attention line; the funnel, worklist and territory health live on Overview. Rows switch to a compact layout when the page column is narrower than 820 px (container query); the Ask panel opens by default only at 1500 px and wider.
+- nextAction(r) in ui.js maps a decision to the one short action shown in the table.
+
 ## Motion
 - src/ext/motion.js: GSAP (vendor/gsap.min.js, served from the site, free no-charge licence) animates the first screen, a new file (outcome bar, counters, rows), page changes, records and record sections, Ask the desk and its messages, and decisions that changed. It does nothing if GSAP is missing or prefers-reduced-motion is on; test/motion.js checks both and that nothing is left half-faded.
 

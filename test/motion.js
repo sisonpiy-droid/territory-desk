@@ -2,7 +2,7 @@
 // Run: node test/motion.js
 const { chromium } = require('playwright'), path = require('path'), assert = require('assert');
 const url = 'file://' + path.join(__dirname, '..', 'dist', 'index.html'), xl = path.join(__dirname, '..', 'test-data', 'sample-judges-layout.xlsx');
-const stuck = p => p.evaluate(() => [...document.querySelectorAll('.row, .ps, .oc, .detail, .msg, .page-h h1, #tabbody > *')].filter(e => { const c = getComputedStyle(e); return +c.opacity < 1 || c.visibility === 'hidden'; }).length);
+const stuck = p => p.evaluate(() => [...document.querySelectorAll('.row, .kpi, .attn, .detail, .msg, .page-h h1, #tabbody > *')].filter(e => { const c = getComputedStyle(e); return +c.opacity < 1 || c.visibility === 'hidden'; }).length);
 (async () => {
   const b = await chromium.launch(), errs = [];
   const open = async (opts, block) => {
@@ -16,11 +16,11 @@ const stuck = p => p.evaluate(() => [...document.querySelectorAll('.row, .ps, .o
   assert(await p.evaluate(() => !!window.gsap), 'gsap loaded');
   await p.setInputFiles('#file', xl); await p.waitForSelector('.row');
   await p.waitForTimeout(120);
-  const mid = await p.evaluate(() => { const r = document.querySelectorAll('.rows > .row'); return { first: +getComputedStyle(r[0]).opacity, bar: getComputedStyle(document.querySelector('.bar .seg')).transform }; });
-  assert(mid.first < 1 || mid.bar !== 'none', 'something is animating shortly after upload ' + JSON.stringify(mid));
+  const mid = await p.evaluate(() => { const r = document.querySelectorAll('.rows > .row'); return { first: +getComputedStyle(r[0]).opacity, bar: getComputedStyle(document.querySelector('.kpi')).opacity }; });
+  assert(mid.first < 1 || +mid.bar < 1, 'something is animating shortly after upload ' + JSON.stringify(mid));
   await p.waitForTimeout(2500);
   assert.strictEqual(await stuck(p), 0, 'nothing left half-faded after the intro');
-  assert.strictEqual(await p.evaluate(() => document.querySelector('.ps b').textContent), '20', 'counters end on the true number');
+  assert.strictEqual(await p.evaluate(() => document.querySelector('.kpi b').textContent), '20', 'counters end on the true number');
   await p.click('#row-APP-002 .row-h'); await p.waitForTimeout(700);
   await p.click('[data-act=tab][data-v=overview]'); await p.waitForTimeout(1200);
   if (!(await p.locator('#askin').isVisible())) await p.click('#askbtn'); await p.fill('#askin', 'APP-012 has now found a ground-floor space'); await p.press('#askin', 'Enter'); await p.waitForTimeout(1500);
@@ -32,7 +32,7 @@ const stuck = p => p.evaluate(() => [...document.querySelectorAll('.row, .ps, .o
   p = await open({ viewport: { width: 1366, height: 800 }, reducedMotion: 'reduce' });
   await p.setInputFiles('#file', xl); await p.waitForSelector('.row');
   assert.strictEqual(await stuck(p), 0, 'reduced motion: nothing hidden at any point');
-  assert.strictEqual(await p.evaluate(() => getComputedStyle(document.querySelector('.bar .seg')).transform), 'none');
+  assert.strictEqual(await p.evaluate(() => getComputedStyle(document.querySelector('.kpi')).transform), 'none');
   await p.close();
 
   // 3. GSAP missing (blocked): the app works exactly as before

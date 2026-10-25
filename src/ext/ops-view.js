@@ -15,19 +15,14 @@ function appLink(id) { return '<button class="link" data-act="open-app" data-v="
 
 /* ---------- pipeline ---------- */
 function pipeHtml() {
-  var p = O.pipeline(S), total = p[0].n, out = [];
-  p.forEach(function (s, i) {
-    if (i) {
-      var lk = s.leakIds.length;
-      out.push('<div class="leak' + (lk ? '' : ' none') + '">' + (lk ?
-        '<button class="leak-n" data-act="ops-ids" data-ids="' + s.leakIds.join(',') + '" data-label="applications that dropped out before ' + esc(s.label.toLowerCase()) + '">−' + lk + '</button>' +
-        '<ul>' + s.reasons.slice(0, 3).map(function (r) { return '<li>' + esc(r.reason) + (r.n > 1 ? ' <b>' + r.n + '</b>' : '') + '</li>'; }).join('') + (s.reasons.length > 3 ? '<li class="muted">and ' + (s.reasons.length - 3) + ' more</li>' : '') + '</ul>'
-        : '<span class="muted">no drop-out</span>') + '</div>');
-    }
-    out.push('<button class="step s-' + s.key + '" data-act="ops-ids" data-ids="' + s.ids.join(',') + '" data-label="applications that reached ' + esc(s.label.toLowerCase()) + '">' +
-      '<span>' + esc(s.label) + '</span><b>' + s.n + '</b><small>' + (i ? pct(s.n, total) + ' of received' : 'applications') + '</small></button>');
-  });
-  return '<div class="card pipe-card"><h3>Pipeline and where applications drop out</h3><p class="muted sm">Click a step or a drop-out to see those applications in the list below.</p><div class="pipe">' + out.join('') + '</div></div>';
+  var p = O.pipeline(S), total = p[0].n || 1;
+  var rows = p.map(function (s, i) {
+    var lk = s.leakIds.length, why = s.reasons.slice(0, 3).map(function (r) { return esc(r.reason) + (r.n > 1 ? ' (' + r.n + ')' : ''); }).join('; ') + (s.reasons.length > 3 ? '; and ' + (s.reasons.length - 3) + ' more' : '');
+    return '<div class="fb-row"><div class="fb-l">' + esc(s.label) + '</div>' +
+      '<button class="fb-track" data-act="ops-ids" data-ids="' + s.ids.join(',') + '" data-label="applications that reached ' + esc(s.label.toLowerCase()) + '" aria-label="' + esc(s.label) + ': ' + s.n + '"><span class="fb-fill ' + (s.key === 'placed' ? 'ok' : '') + '" style="width:' + Math.max(4, Math.round(100 * s.n / total)) + '%"><b>' + s.n + '</b></span></button>' +
+      '<div class="fb-leak">' + (i && lk ? '<button class="leak-n" data-act="ops-ids" data-ids="' + s.leakIds.join(',') + '" data-label="applications that dropped out before ' + esc(s.label.toLowerCase()) + '">−' + lk + '</button> ' + why : '') + '</div></div>';
+  }).join('');
+  return '<div class="card pipe-card"><h3>Pipeline: where applications drop out</h3><p class="muted sm">Click a bar or a drop-out count to see those applications in the list.</p><div class="fb">' + rows + '</div></div>';
 }
 
 /* ---------- worklist ---------- */
@@ -110,21 +105,14 @@ function view() {
 }
 function todo() { var n = 0; O.worklist(S).forEach(function (g) { n += g.items.length; }); return n; }
 
-// Decisions page: a slim strip with the pipeline and the three things to act on, each linking to its page
+// Decisions page: one line on what needs a person today, linking to the Overview worklist
 function strip() {
   if (!S.run) return '';
   sync();
-  var p = O.pipeline(S), b = O.beforeAfter(S, T), short = O.territoryHealth(S).filter(function (t) { return t.open > 0; });
-  var open = 0; short.forEach(function (t) { open += t.open; });
-  var steps = p.map(function (s, i) {
-    return (i ? '<span class="ps-leak" title="' + esc(s.reasons.map(function (r) { return r.reason + ' (' + r.n + ')'; }).join('; ')) + '">' + (s.leakIds.length ? '−' + s.leakIds.length : '') + '</span>' : '') +
-      '<button class="ps" data-act="ops-ids" data-ids="' + s.ids.join(',') + '" data-label="applications that reached ' + esc(s.label.toLowerCase()) + '"><b>' + s.n + '</b><span>' + esc(s.label) + '</span></button>';
-  }).join('');
-  var go = function (tab, big, label) { return '<button class="oc" data-act="tab" data-v="' + tab + '"><b>' + big + '</b><span>' + label + '</span></button>'; };
-  return '<section class="ops ops-strip" aria-label="Today at a glance"><div class="ps-row">' + steps + '</div><div class="oc-row">' +
-    go('overview', todo(), 'things need a person today') +
-    go(window.DeskPlanner ? 'pipeplan' : 'overview', open, 'open slots in ' + short.length + ' territor' + (short.length === 1 ? 'y' : 'ies')) +
-    go('overview', (Math.round(b.savedHours * 10) / 10) + ' h', 'saved on this file') + '</div></section>';
+  var g = O.worklist(S), n = 0, by = {};
+  g.forEach(function (x) { n += x.items.length; by[x.key] = x.items.length; });
+  var bits = [['chase', 'to chase'], ['verify', 'conditions to verify'], ['contest', 'contested'], ['alt', 'alternative pins']].filter(function (b) { return by[b[0]]; }).map(function (b) { return by[b[0]] + ' ' + b[1]; });
+  return '<section class="attn" aria-label="Needs attention"><span><b>' + n + '</b> thing' + (n === 1 ? '' : 's') + ' need a person today</span>' + (bits.length ? '<span class="muted">' + bits.join(' · ') + '</span>' : '') + '<span class="grow"></span><button class="link" data-act="tab" data-v="overview">Open the worklist →</button></section>';
 }
 
 window.DeskExt.afterSummary.push(strip);
@@ -175,6 +163,13 @@ document.addEventListener('change', function (e) {
 var css = document.createElement('style');
 css.textContent = [
   '.ops { margin-bottom: 16px; }',
+  '.fb { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }',
+  '.fb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }',
+  '.fb-l { flex: 0 0 92px; font-weight: 600; font-size: 14px; }',
+  '.fb-track { flex: 1 1 240px; min-width: 160px; height: 26px; background: var(--surface2); border: 0; border-radius: 6px; padding: 0; display: block; text-align: left; overflow: hidden; }',
+  '.fb-fill { display: flex; align-items: center; height: 100%; padding-left: 10px; background: var(--ink); color: var(--bg); border-radius: 6px; } .fb-fill.ok { background: var(--ok); color: #fff; } .fb-fill b { font-weight: 700; }',
+  '.fb-track:hover .fb-fill { opacity: .88; }',
+  '.fb-leak { flex: 1 1 280px; font-size: 13px; color: var(--muted); }',
   '.ops-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }',
   '.ps-row { display: flex; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 6px; flex: 1 1 360px; }',
   '.ps { flex: 1; display: flex; flex-direction: column; align-items: center; border: 0; background: none; border-radius: 8px; padding: 4px 6px; min-width: 0; }',

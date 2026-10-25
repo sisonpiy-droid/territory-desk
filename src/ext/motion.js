@@ -26,11 +26,9 @@ function countUp(el, delay) {
 // a new file: bar draws, strip numbers count, rows file in
 var intro = safe(function () {
   var tl = gsap.timeline({ defaults: { ease: EASE } });
-  var bar = $$('.bar .seg');
-  if (bar.length) tl.from(bar, { scaleX: 0, transformOrigin: 'left center', duration: 0.7, stagger: 0.08 }, 0);
-  var nums = $$('.ps b, .oc b, .fchip b');
+  var nums = $$('.kpi b');
   nums.forEach(function (n, i) { countUp(n, 0.05 * i); });
-  var cards = $$('.ps, .oc');
+  var cards = $$('.kpi, .attn');
   if (cards.length) tl.from(cards, { y: 10, autoAlpha: 0, duration: 0.45, stagger: 0.05, clearProps: 'all' }, 0.05);
   var rows = $$('.rows > .row').slice(0, 14);
   if (rows.length) tl.from(rows, { y: 14, autoAlpha: 0, duration: 0.45, stagger: 0.035, clearProps: 'all' }, 0.2);
@@ -40,6 +38,8 @@ var intro = safe(function () {
 var pageIn = safe(function () {
   var body = $('#tabbody'); if (!body) return;
   gsap.from(body.children, { y: 12, autoAlpha: 0, duration: 0.4, stagger: 0.05, ease: EASE, clearProps: 'all' });
+  var fills = $$('.fb-fill', body);
+  if (fills.length) gsap.from(fills, { scaleX: 0, transformOrigin: 'left center', duration: 0.7, stagger: 0.08, ease: EASE, clearProps: 'all' });
   var h = $('.page-h h1'); if (h) gsap.from(h, { x: -10, autoAlpha: 0, duration: 0.35, ease: EASE, clearProps: 'all' });
 });
 
@@ -99,7 +99,7 @@ if (window.MutationObserver) {
 
 // press feedback on buttons: a small, quick squeeze
 document.addEventListener('pointerdown', safe(function (e) {
-  var b = e.target.closest && e.target.closest('.btn, .fchip, .chip, .nav-i, .ps, .oc, .dtab');
+  var b = e.target.closest && e.target.closest('.btn, .kpi, .chip, .nav-i, .dtab');
   if (b && !b.disabled) gsap.fromTo(b, { scale: 0.97 }, { scale: 1, duration: 0.35, ease: 'back.out(3)', clearProps: 'transform' });
 }), true);
 })();

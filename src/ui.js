@@ -112,8 +112,10 @@ function pages() {
 function render() {
   var root = $('#app');
   document.body.classList.toggle('has-data', !!S.run);
+  var tf = $('#topfile');
+  if (tf) tf.textContent = S.run ? S.apps.filter(function (a) { return !a.withdrawn; }).length + ' applications' + (S.label ? ' from ' + S.label : '') + (S.loadedAt ? ' · loaded ' + S.loadedAt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '') : '';
   if (!S.run) { root.innerHTML = emptyState(); return; }
-  if (S.askOpen === undefined) S.askOpen = window.innerWidth >= 1280;
+  if (S.askOpen === undefined) S.askOpen = window.innerWidth >= 1500;   // below that the page column needs the room for the table
   var pg = pages()[S.tab] || pages().decisions;
   root.innerHTML =
     '<div class="shell' + (S.askOpen ? ' ask-open' : '') + '">' +
@@ -145,17 +147,28 @@ function navHtml() {
 }
 
 function emptyState() {
+  var dot = function (c) { return '<i style="background:var(--' + c + ')"></i>'; };
   return '<section class="empty">' +
-    '<p class="eyebrow">Franchise partner desk</p>' +
-    '<h1>Every franchise application, decided and explained.</h1>' +
-    '<p class="lede">Upload the Applications and Territories workbook. Each partner gets an outcome, the reason, what to do next and a training plan. The brand never opens two stores in one pin code.</p>' +
-    '<div class="drop" id="drop"><div class="drop-i" aria-hidden="true"></div><div><strong>Drop the .xlsx file here</strong><span class="muted sm">Applications and Territories sheets, as in the judges\' template</span></div>' +
-      '<div class="drop-b"><label class="btn primary">Choose a file<input type="file" id="file2" accept=".xlsx,.xls" hidden></label>' +
-      '<button class="btn" data-act="sample">Try the sample data</button></div></div>' +
-    '<ol class="steps"><li><b>Upload</b><span>Every application is checked and decided in about a second.</span></li>' +
-      '<li><b>Review</b><span>See why, what is missing, and what needs a person today.</span></li>' +
-      '<li><b>Ask</b><span>Ask why, or tell the desk something new; decisions update.</span></li></ol>' +
-    '<p class="fine">Nothing is uploaded anywhere: the workbook is read and decided inside your browser. <button class="link" data-act="dl-sample">Download a sample workbook</button> to see the expected layout.</p>' +
+    '<div><h1>Load this week\'s file</h1>' +
+    '<p class="lede">One workbook with an Applications sheet and a Territories sheet. Each application gets an outcome, the reason and what to do next. The brand never opens two stores in one pin code. Everything is decided in this browser; nothing is uploaded.</p></div>' +
+    '<div class="st-grid">' +
+      '<section class="st-card" style="flex: 3 1 440px">' +
+        '<div class="drop" id="drop"><div class="drop-i" aria-hidden="true"></div><div><strong>Drop the .xlsx file here</strong><span class="muted sm">or choose it from your computer</span></div>' +
+        '<div class="drop-b"><label class="btn primary">Choose a file<input type="file" id="file2" accept=".xlsx,.xls" hidden></label></div></div>' +
+        '<div class="drop-b" style="align-items:center"><button class="btn" data-act="sample">Try the sample data</button><button class="link" data-act="dl-sample">Download the template</button>' +
+        '<span class="muted sm">Needs Application ID, City, Pin code, Investment, Space and the other columns in the template.</span></div>' +
+      '</section>' +
+      '<section class="st-card" style="flex: 2 1 300px"><h2>What you get after loading</h2><ul class="st-list">' +
+        '<li>' + dot('ok') + '<span><b>An outcome for every application</b>, with the reason: approved, waitlisted, on hold or rejected.</span></li>' +
+        '<li>' + dot('wait') + '<span><b>A worklist</b> of what needs a person today, with each message drafted in the applicant\'s language.</span></li>' +
+        '<li>' + dot('hold') + '<span><b>Territory health</b>: slots filled, open and blocked, one store per pin code.</span></li>' +
+        '<li>' + dot('ink') + '<span><b>Ask the desk</b>: ask why, or tell it something new and decisions update.</span></li></ul></section>' +
+    '</div>' +
+    '<section class="st-card" style="padding:0;gap:0"><div style="padding:10px 16px;font-size:14px;font-weight:600">Rules the desk applies</div><div class="st-rules">' +
+      '<div><b>One store per pin code</b><span>Never two stores in the same pin, including existing stores.</span></div>' +
+      '<div><b>Minimum investment by tier</b><span>Rs 30, 25 and 20 lakh. Hold if slightly short, reject if far short.</span></div>' +
+      '<div><b>Space</b><span>At least 250 sq ft, ground floor or mall. Upper floors are held.</span></div>' +
+      '<div><b>Slots per territory</b><span>Top scores take the open slots; the rest are waitlisted.</span></div></div></section>' +
   '</section>';
 }
 
@@ -166,15 +179,11 @@ function summaryHtml() {
   var slots = 0, filled = 0;
   S.ters.forEach(function (t) { slots += t.slots; filled += Math.min(t.slots, S.run.approvedByTer[t.id] || 0); });
   var locked = 0; S.ters.forEach(function (t) { t.pins.forEach(function (p) { if (S.run.ctx.storeByPin[p]) locked++; }); });
-  var bar = OUT.map(function (o) { return counts[o] ? '<i class="seg ' + OUT_CLASS[o] + '" style="flex:' + counts[o] + '" title="' + o + ' ' + counts[o] + '"></i>' : ''; }).join('');
-  var chips = [['all', 'All', total]].concat(OUT.map(function (o) { return [o, { Approve: 'Approved', Waitlist: 'Waitlisted', Hold: 'On hold', Reject: 'Rejected' }[o], counts[o]]; })).map(function (c) {
-    return '<button class="fchip' + (S.filter === c[0] ? ' on' : '') + '" data-act="filter" data-v="' + c[0] + '" aria-pressed="' + (S.filter === c[0]) + '">' + (c[0] === 'all' ? '' : '<span class="dot ' + OUT_CLASS[c[0]] + '"></span>') + c[1] + ' <b>' + c[2] + '</b></button>';
+  var tiles = [['all', 'All applications', total, 'ink']].concat(OUT.map(function (o) { return [o, { Approve: 'Approved', Waitlist: 'Waitlisted', Hold: 'On hold', Reject: 'Rejected' }[o], counts[o], OUT_CLASS[o]]; })).map(function (c) {
+    return '<button class="kpi' + (S.filter === c[0] ? ' on' : '') + '" data-act="filter" data-v="' + c[0] + '" aria-pressed="' + (S.filter === c[0]) + '"><span><i class="dot ' + c[3] + '"' + (c[3] === 'ink' ? ' style="background:var(--ink)"' : '') + '></i>' + c[1] + '</span><b>' + c[2] + '</b></button>';
   }).join('');
-  return '<div class="summary">' +
-    '<div class="sum-top"><div class="sum-meta"><b>' + total + ' applications</b>' + (S.label ? ' from ' + esc(S.label) : '') + ' · ' + filled + ' of ' + slots + ' slots filled · ' + locked + ' pins locked by existing stores' + (gone ? ' · ' + gone + ' withdrawn' : '') + '</div></div>' +
-    '<div class="bar" role="img" aria-label="Outcome split">' + bar + '</div>' +
-    '<div class="toolbar"><div class="chips" role="group" aria-label="Filter by outcome">' + chips + '</div>' +
-    '<input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"></div></div>';
+  return '<div class="summary"><p class="sum-meta">' + filled + ' of ' + slots + ' slots filled · ' + locked + ' pins locked by existing stores' + (gone ? ' · ' + gone + ' withdrawn' : '') + '</p>' +
+    '<div class="kpis" role="group" aria-label="Filter by outcome">' + tiles + '</div></div>';
 }
 
 function noticesHtml() {
@@ -190,34 +199,60 @@ function tabBody() {
 }
 
 /* ---------- Decisions ---------- */
+// the one short action a person would take next on this application
+function nextAction(r) {
+  if (r.outcome === 'Reject') return 'Keep on file';
+  if (r.outcome === 'Waitlist') return r.alternatives && r.alternatives.length ? 'Offer another pin' : 'Wait for a slot';
+  if (r.outcome === 'Hold') {
+    var h = r.issues.filter(function (i) { return i.level === 'hold'; }).map(function (i) { return i.code; });
+    if (h.indexOf('PIN_HAS_STORE') >= 0 || h.indexOf('PIN_OUTSIDE') >= 0) return 'Ask for another pin';
+    if (h.indexOf('PIN_MISMATCH') >= 0 || h.indexOf('PIN_BAD') >= 0 || h.indexOf('CITY_UNKNOWN') >= 0) return 'Correct the pin or city';
+    if (h.indexOf('NOTES_CONFLICT') >= 0) return 'Clear the contradiction';
+    if (h.indexOf('INVEST_GAP') >= 0 || h.indexOf('INVEST_MISSING') >= 0) return 'Ask for proof of funds';
+    if (h.indexOf('NO_SPACE') >= 0) return 'Chase for a space';
+    if (h.indexOf('FLOOR_UPPER') >= 0) return 'Ask for a ground floor';
+    return 'Ask for the missing item';
+  }
+  var c = (r.conditions || []).join(' ').toLowerCase();
+  if (r.override && r.override.applied) return 'Resolve the override conditions';
+  if (/loan/.test(c)) return 'Get the loan letter';
+  if (/size/.test(c)) return 'Confirm the space size';
+  if (/lease/.test(c)) return 'Register the lease';
+  return 'Verify KYC';
+}
+
 function decisionsHtml() {
-  var q = S.q.trim().toLowerCase();
+  var q = S.q.trim().toLowerCase(), shown = 0;
   var rows = S.apps.filter(function (a) {
     var r = S.run.res[a.id], o = a.withdrawn ? 'Withdrawn' : r.outcome;
     if (S.filterIds && S.filterIds.indexOf(a.id) < 0) return false;
     if (S.filter !== 'all' && o !== S.filter) return false;
     if (q && (a.id + ' ' + a.name + ' ' + a.pin + ' ' + a.city).toLowerCase().indexOf(q) < 0) return false;
     return true;
-  }).map(rowHtml).join('');
+  }).map(function (a) { shown++; return rowHtml(a); }).join('');
   var only = S.filterIds ? '<p class="only">Showing ' + esc(S.filterLabel || 'a selection') + ' (' + S.filterIds.length + '). <button class="link" data-act="clear-ids">Show all</button></p>' : '';
-  return summaryHtml() + only + '<div class="rows">' + (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
+  return summaryHtml() + only + '<div class="rows"><div class="rows-tools"><input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"><span class="count">Showing ' + shown + ' of ' + S.apps.length + '</span></div>' +
+    '<div class="row-head" aria-hidden="true"><span>ID</span><span>Applicant</span><span>Terr.</span><span>Outcome</span><span>Score</span><span>Why</span><span>Next action</span><span></span></div>' +
+    (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
 }
 
 function rowHtml(a) {
   var r = S.run.res[a.id];
   if (a.withdrawn) {
-    return '<article class="row gone"><div class="row-h"><span class="rid">' + esc(a.id) + '</span><span class="rname">' + esc(a.name) + '</span>' + pill('Withdrawn') + '<span class="rwhy muted">Withdrawn by applicant</span></div></article>';
+    return '<article class="row gone"><div class="row-h"><span class="rid">' + esc(a.id) + '</span><span class="rname">' + esc(a.name) + '</span><span class="rter"></span><span class="rout">' + pill('Withdrawn') + '</span><span class="rwhy muted">Withdrawn by applicant</span></div></article>';
   }
   var x = E.explain(r, a, { cfg: S.cfg, run: S.run });
   var open = !!S.open[a.id];
   var was = S.changed[a.id] ? '<span class="was">was ' + esc(S.changed[a.id]) + '</span>' : '';
   var score = (r.outcome === 'Approve' || r.outcome === 'Waitlist') ? '<span class="score">' + r.score + '</span>' : '<span class="score off">–</span>';
-  return '<article class="row' + (open ? ' open' : '') + '" id="row-' + esc(a.id) + '">' +
+  return '<article class="row ' + OUT_CLASS[r.outcome] + (open ? ' open' : '') + '" id="row-' + esc(a.id) + '">' +
     '<button class="row-h" data-act="toggle" data-v="' + esc(a.id) + '" aria-expanded="' + open + '">' +
       '<span class="rid">' + esc(a.id) + '</span>' +
-      '<span class="rname">' + esc(a.name) + '<small>' + esc(a.city) + ', ' + esc(a.pin) + '</small></span>' +
+      '<span class="rname">' + esc(a.name) + '<small>' + esc(a.city) + ' ' + esc(a.pin) + '</small></span>' +
+      '<span class="rter">' + (r.ter ? esc(r.ter.id) : '–') + '</span>' +
       '<span class="rout">' + pill(r.outcome) + was + window.DeskExt.rowBadges.map(function (fn) { try { return fn(a, r, S) || ''; } catch (e) { return ''; } }).join('') + '</span>' + score +
       '<span class="rwhy">' + esc(x.short || x.headline) + '</span>' +
+      '<span class="ract">' + esc(nextAction(r)) + '</span>' +
       '<span class="chev" aria-hidden="true"></span></button>' +
     (open ? detailHtml(a, r, x) : '') + '</article>';
 }

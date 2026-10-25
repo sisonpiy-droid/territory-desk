@@ -28,7 +28,7 @@ const files = {
         assert(exp.error.test(await p.locator('#err').innerText()), f + ' error message');
         console.log('  ok  ', label, path.basename(f), '-> clear error message');
       } else {
-        await p.waitForFunction(n => document.querySelectorAll('.row').length === n && document.querySelector('.ops'), exp.rows, { timeout: 20000 });
+        await p.waitForFunction(n => document.querySelectorAll('.row').length === n && document.querySelector('.kpis'), exp.rows, { timeout: 20000 });
         assert(await p.locator('#err').isHidden(), f + ' showed an error');
         console.log('  ok  ', label, path.basename(f), '->', exp.rows, 'decisions in', Date.now() - t0, 'ms');
       }
