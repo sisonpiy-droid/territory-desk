@@ -149,6 +149,23 @@ var ICON = {
   register: '<path d="M4 2.5h8v11H4z"/><path d="M6.5 5.5h3M6.5 8h3M6.5 10.5h2"/>'
 };
 function icon(id) { return ICON[id] ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[id] + '</svg>' : ''; }
+var SUN = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>';
+var MOON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 9.5A5.5 5.5 0 016.5 2.5a5.5 5.5 0 107 7z"/></svg>';
+function isDark() {
+  var t = document.documentElement.getAttribute('data-theme');
+  return t ? t === 'dark' : !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+function paintThemeBtn() {
+  var b = document.getElementById('themebtn'); if (!b) return;
+  var d = isDark(), label = d ? 'Switch to light mode' : 'Switch to dark mode';
+  b.innerHTML = d ? SUN : MOON; b.setAttribute('aria-label', label); b.title = label;
+}
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('desk-theme', t); } catch (e) {}
+  paintThemeBtn();
+}
+paintThemeBtn();
 function navHtml() {
   var all = pages(), used = {};
   var item = function (id) {
@@ -759,6 +776,7 @@ document.addEventListener('click', function (e) {
     case 'export': exportDecisions(); break;
     case 'tab': S.tab = v; if (window.innerWidth < 1280) S.askOpen = false; render(); document.documentElement.scrollTop = 0; break;
     case 'dtab': S.dtab[el.getAttribute('data-id')] = v; refreshBody(); break;
+    case 'theme-toggle': setTheme(isDark() ? 'light' : 'dark'); break;
     case 'ask-toggle': S.askOpen = !S.askOpen; render(); if (S.askOpen) { var ai = $('#askin'); if (ai) ai.focus(); } break;
     case 'clear-ids': S.filterIds = null; refreshBody(); break;
     case 'filter': S.filterIds = null; S.filter = v; S.tab = 'decisions'; render(); break;
