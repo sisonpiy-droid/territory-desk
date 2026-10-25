@@ -249,7 +249,7 @@ function decisionsHtml() {
   }).map(function (a) { shown++; return rowHtml(a); }).join('');
   var only = S.filterIds ? '<p class="only">Showing ' + esc(S.filterLabel || 'a selection') + ' (' + S.filterIds.length + '). <button class="link" data-act="clear-ids">Show all</button></p>' : '';
   return only + '<div class="rows"><div class="rows-tools">' + filterBar() + '<input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"><span class="count">Showing ' + shown + ' of ' + S.apps.length + '</span></div>' +
-    '<div class="row-head" aria-hidden="true"><span>ID</span><span>Applicant</span><span>Terr.</span><span>Outcome</span><span>Score</span><span>Why</span><span>Next action</span><span></span></div>' +
+    '<div class="row-head" aria-hidden="true"><span>ID</span><span>Applicant</span><span>Territory</span><span title="Decision, then how much of the catchment overlaps other stores, then how sure the desk is">Decision, overlap, confidence</span><span>Score</span><span>Reason</span><span>What to do next</span><span></span></div>' +
     (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
 }
 

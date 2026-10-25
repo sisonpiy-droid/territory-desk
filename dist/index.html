@@ -165,7 +165,7 @@ body:not(.has-data) #askbtn { display: none; }
 .icon-b svg { width: 16px; height: 16px; }
 .rows-tools .search { flex: 1 1 240px; height: 36px; padding: 0 12px; border-radius: 8px; }
 .rows-tools .count { color: var(--muted); font-size: 13px; }
-.row-head, .row-h { display: grid; grid-template-columns: 70px minmax(120px, 1.1fr) 56px 214px 46px minmax(0, 1.6fr) minmax(0, 1fr) 14px; gap: 10px; align-items: center; }
+.row-head, .row-h { display: grid; grid-template-columns: 70px minmax(120px, 1.1fr) 72px 214px 46px minmax(0, 1.6fr) minmax(0, 1fr) 14px; gap: 10px; align-items: center; }
 .row-head { padding: 7px 14px; background: var(--surface2); color: var(--muted); font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--line); }
 .row-head span:nth-child(5) { text-align: right; }
 .rter { color: var(--muted); font-size: 13px; } .ract { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -174,7 +174,7 @@ body:not(.has-data) #askbtn { display: none; }
 .row.open { background: color-mix(in srgb, var(--ink) 3%, var(--surface)); }
 .row.gone { opacity: .7; }
 .row-h { width: 100%; background: none; border: 0; text-align: left; padding: 9px 14px; }
-.row.gone .row-h { grid-template-columns: 70px minmax(120px, 1.1fr) 56px 214px 1fr; }
+.row.gone .row-h { grid-template-columns: 70px minmax(120px, 1.1fr) 72px 214px 1fr; }
 .rid { font-weight: 600; white-space: nowrap; }
 .rname { display: flex; flex-direction: column; line-height: 1.25; font-weight: 600; font-size: 14px; }
 .rname small { color: var(--muted); font-weight: 400; font-size: 12px; }
@@ -2599,7 +2599,7 @@ function decisionsHtml() {
   }).map(function (a) { shown++; return rowHtml(a); }).join('');
   var only = S.filterIds ? '<p class="only">Showing ' + esc(S.filterLabel || 'a selection') + ' (' + S.filterIds.length + '). <button class="link" data-act="clear-ids">Show all</button></p>' : '';
   return only + '<div class="rows"><div class="rows-tools">' + filterBar() + '<input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"><span class="count">Showing ' + shown + ' of ' + S.apps.length + '</span></div>' +
-    '<div class="row-head" aria-hidden="true"><span>ID</span><span>Applicant</span><span>Terr.</span><span>Outcome</span><span>Score</span><span>Why</span><span>Next action</span><span></span></div>' +
+    '<div class="row-head" aria-hidden="true"><span>ID</span><span>Applicant</span><span>Territory</span><span title="Decision, then how much of the catchment overlaps other stores, then how sure the desk is">Decision, overlap, confidence</span><span>Score</span><span>Reason</span><span>What to do next</span><span></span></div>' +
     (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
 }
 
