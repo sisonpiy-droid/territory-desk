@@ -109,7 +109,7 @@ function chipsHtml() {
   return zones.length ? '<div class="sf-chips"><span class="muted sm">Search zones:</span>' + zones.map(function (a) { return '<button class="chip" data-act="geo-app" data-v="' + esc(a.id) + '">' + esc(a.id) + ' ' + esc(a.pin) + ' ' + (S.run.res[a.id].outcome === 'Approve' ? '(approved)' : '(needs a space)') + '</button>'; }).join('') + '</div>' : '';
 }
 function tabHtml() {
-  var head = '<div class="sf-head"><div><h3>Site finder</h3><p class="muted sm">Enter any pin code or place in India to see where inside it to look for a shop, and why.</p></div>' +
+  var head = '<div class="sf-head"><div><p class="muted sm">Enter any pin code or place in India to see where inside it to look for a shop, and why.</p></div>' +
     '<div class="sf-q"><input id="geo-pin" maxlength="60" placeholder="Pin or place, e.g. 575002 or Hosapete" value="' + esc(V.query || V.pin) + '" aria-label="Pin code or place"><button class="btn sm primary" data-act="geo-go">Find sites</button></div></div>' + chipsHtml();
   var body = '', lv = V.query ? live[V.query] : V.pin ? live[V.pin] : null;
   if (lv && lv.state === 'loading') body = '<div class="sf-box sf-wait"><p><b>Looking up ' + esc(V.query || 'pin ' + V.pin) + ' on the live map (OpenStreetMap).</b></p><p class="muted sm">The first lookup of a place can take up to a minute because the public map servers are busy; after that it is instant.</p></div>';
@@ -127,7 +127,7 @@ function tabHtml() {
 window.DeskExt.tabs.push({ id: 'sites', label: 'Site finder', render: tabHtml });
 
 /* ---------- entry points elsewhere ---------- */
-window.DeskExt.afterDetail.push(function (a, r) {
+window.DeskExt.afterDetail.push({ group: 'plan', fn: function (a, r) {
   if (!(noSpace(a, r) || r.outcome === 'Approve')) return '';
   var x = rec(a.pin, a.id);
   var h = '<h4>' + (r.outcome === 'Approve' ? 'Recommended search zone' : 'Where to look for a shop') + '</h4>';
@@ -135,7 +135,7 @@ window.DeskExt.afterDetail.push(function (a, r) {
   var t = x.top[0];
   return h + '<p>Best hexagon in pin ' + esc(a.pin) + ': ' + esc(t.landmarks[0] ? 'near ' + t.landmarks[0] : 'around ' + t.lat.toFixed(4) + ', ' + t.lon.toFixed(4)) + ' (crowd potential ' + Math.round(t.potential) + ', ' + Math.round(100 * t.overlap) + '% overlap with existing catchments).</p>' +
     '<p><button class="btn sm" data-act="geo-app" data-v="' + esc(a.id) + '">Open in Site finder</button></p>';
-});
+} });
 window.DeskExt.boardTerritory.push(function (t) {
   var open = t.pins.filter(function (p) { return !S.run.ctx.storeByPin[p] && !S.run.approvedPins[p]; });
   if (!open.length) return '';

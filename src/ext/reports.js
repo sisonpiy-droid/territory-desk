@@ -94,7 +94,7 @@ function reportsHtml() {
 }
 window.DeskExt.tabs.push({ id: 'reports', label: 'Reports', render: reportsHtml });
 
-window.DeskExt.afterDetail.push(function (a) { return '<p><button class="btn sm" data-act="rep-memo" data-id="' + esc(a.id) + '">Print decision memo</button></p>'; });
+window.DeskExt.afterDetail.push({ group: 'message', fn: function (a) { return '<button class="btn sm" data-act="rep-memo" data-id="' + esc(a.id) + '">Print decision memo</button>'; } });
 
 document.addEventListener('click', function (e) {
   var el = e.target.closest && e.target.closest('[data-act^="rep-"]'); if (!el) return;

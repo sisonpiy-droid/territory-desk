@@ -56,18 +56,18 @@ function overrideHtml(a, r) {
 }
 
 /* ---------- row detail additions ---------- */
-window.DeskExt.afterDetail.push(function (a, r) {
-  var out = '';
-  if (r.outcome === 'Approve') {
-    var p = P.plan(a, r, S.cfg, S.loadedAt || new Date(), S.stages[a.id] || 0, new Date());
-    out += '<h4>Plan back from the target</h4><p>Sign by <b>' + fmt(p.latestSign) + '</b> to open on <b>' + fmt(p.open) + '</b>. ' + esc(p.basis) + '</p>' +
-      (p.atRisk ? '<p class="risk">At risk: ' + esc(p.risks.join('; ')) + '.</p>' : '') +
-      '<p class="muted sm">Stage: ' + esc(P.STAGES[p.stage]) + '. Next: ' + esc(p.next ? p.next.title + ' (' + p.next.owner + ', due ' + fmt(p.next.due) + ')' : 'none') + '. <button class="link" data-act="tab" data-v="onboard">Open the stage board</button></p>';
-  }
+window.DeskExt.afterDetail.push({ group: 'plan', fn: function (a, r) {
+  if (r.outcome !== 'Approve') return '';
+  var p = P.plan(a, r, S.cfg, S.loadedAt || new Date(), S.stages[a.id] || 0, new Date());
+  return '<h4>Plan back from the target</h4><p>Sign by <b>' + fmt(p.latestSign) + '</b> to open on <b>' + fmt(p.open) + '</b>. ' + esc(p.basis) + '</p>' +
+    (p.atRisk ? '<p class="risk">At risk: ' + esc(p.risks.join('; ')) + '.</p>' : '') +
+    '<p class="muted sm">Stage: ' + esc(P.STAGES[p.stage]) + '. Next: ' + esc(p.next ? p.next.title + ' (' + p.next.owner + ', due ' + fmt(p.next.due) + ')' : 'none') + '. <button class="link" data-act="tab" data-v="onboard">Open the stage board</button></p>';
+} });
+window.DeskExt.afterDetail.push(function (a) {
   var t = TR.triggers(S)[a.id];
-  if (t && t.events.length) out += '<h4>Decide again when</h4><ul class="trig">' + t.events.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>' + (t.then ? '<p class="muted sm">Then: ' + esc(t.then) + '.</p>' : '');
-  return out + overrideHtml(a, r);
+  return t && t.events.length ? '<h4>Decide again when</h4><ul class="trig">' + t.events.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>' + (t.then ? '<p class="muted sm">Then: ' + esc(t.then) + '.</p>' : '') : '';
 });
+window.DeskExt.afterDetail.push({ group: 'actions', fn: function (a, r) { return overrideHtml(a, r); } });
 
 /* ---------- Onboarding tab: stage board and backward plans ---------- */
 function onboardHtml() {
@@ -128,7 +128,7 @@ function gatesHtml(ps) {
 /* ---------- Decision log tab ---------- */
 function logHtml() {
   var tr = TR.triggers(S), ids = Object.keys(tr);
-  var waiting = ids.length ? '<ul class="wait">' + ids.map(function (id) {
+  var waiting = ids.length ? '<ul class="waitlist-ul">' + ids.map(function (id) {
     var t = tr[id]; return '<li>' + appLink(id) + ' ' + pill(t.outcome, true) + ' <span>' + esc(t.events.join('; or ') || 'No trigger: needs a person') + '</span>' + (t.then ? ' <span class="muted">Then: ' + esc(t.then) + '.</span>' : '') + '</li>';
   }).join('') + '</ul>' : '<p class="muted">Nothing is waiting.</p>';
   var rows = S.log.slice().reverse().map(function (e) {
@@ -228,7 +228,7 @@ css.textContent = [
   '.pl { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }',
   '.pl summary { cursor: pointer; font-weight: 600; font-size: 14px; } .pl .cmp { margin-top: 6px; }',
   '.pl .cmp th, .pl .cmp td { text-align: left; }',
-  '.wait { list-style: none; padding: 0; margin: 6px 0; } .wait li { padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }',
+  '.waitlist-ul { list-style: none; padding: 0; margin: 6px 0; } .waitlist-ul li { padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }',
   '.tscroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; }',
   '.cmp.lg td { text-align: left; vertical-align: top; } .cmp.lg td:nth-child(-n+3) { white-space: nowrap; }',
   '.kind { font-size: 12px; font-weight: 600; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; white-space: nowrap; }',

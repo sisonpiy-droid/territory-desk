@@ -69,5 +69,11 @@ Code is on GitHub (sisonpiy-droid/territory-desk). Vercel builds every push (ver
 - src/modules/report.js + src/ext/reports.js: Reports tab with the question list for applicants (download, also a sheet in the export), one-page decision memos (print one or all; Save as PDF), and the weekly summary for management (copy or print). Each record has a Print decision memo button.
 - docs/slide8-cost-and-scale.md uses numbers from test/bench.js. Engine reuses evaluations when re-deciding a fixed hold (about 2x faster); the 10% check switches off above 300 applications.
 
+## Layout (UX refresh, 25 Oct 2026)
+- App shell in ui.js: grouped sidebar (NAV in ui.js lists page ids by group; unknown ext pages go under More), page header, Ask the desk as a closable column (drawer below 1280 px, full screen on phones; #askbtn in the top bar). Pages registered via DeskExt.tabs may add badge(S).
+- Decisions page: slim operations strip (afterSummary) + outcome filter chips with counts + list. The full operations view is the Overview page (src/ext/ops-view.js).
+- Record detail is split into sections: Why, Plan, Score and data, Message, Override. DeskExt.afterDetail entries are a function (shown under Why) or { group: 'why'|'plan'|'score'|'message'|'actions', fn }.
+- Rows use a container query on .main, so they switch to the compact layout when the page column is narrow.
+
 ## Status (25 Oct 2026)
 Phases 1 to 4 and extras 1 to 7 are merged to main and live. One session is now building every phase; there is no separate Session B. Next: feature freeze Sunday 6 pm, then bug fixes, the demo video and the final test.

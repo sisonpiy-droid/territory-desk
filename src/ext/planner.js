@@ -28,7 +28,7 @@ function tabHtml() {
     return '<li><b>' + esc(r.id) + ' ' + esc(r.city) + '</b> (' + r.priority.toLowerCase() + ' priority): ' + (r.fixable.length ? 'first chase ' + r.fixable.map(esc).join(', ') + ' (a fixable hold that would take the slot); then ' : '') +
       'recruit about ' + (r.needed == null ? 'an unknown number of' : r.needed) + ' applicant' + (r.needed === 1 ? '' : 's') + (r.pins.length ? ', starting in pin' + (r.pins.length > 1 ? 's ' : ' ') + r.pins.slice(0, 3).map(function (x) { return x.pin; }).join(', ') : '') + '.</li>';
   }).join('');
-  return '<div class="pp"><h3>Pipeline plan</h3><p class="muted sm">How many more applicants each territory needs to fill its open slots, using only this file. Highest-priority territories first.</p>' + head +
+  return '<div class="pp"><p class="muted sm">How many more applicants each territory needs to fill its open slots, using only this file. Highest-priority territories first.</p>' + head +
     '<div class="tscroll"><table class="cmp pp-t"><thead><tr><th>Territory</th><th>Open slots</th><th>Applied</th><th>Rate used</th><th>Fixable holds</th><th>New applicants needed</th><th>Per week</th><th>Where to recruit (crowd)</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     (targets ? '<h4 class="mt">Outreach targets</h4><ul class="pp-list">' + targets + '</ul>' : '<p>Every territory is full.</p>') +
     '<details class="sf-box"><summary>Assumptions (editable)</summary><div class="pp-grid">' +
