@@ -21,6 +21,8 @@ function q(i, a, r, S) {
     case 'FLOOR_UPPER': return 'Is a ground-floor or mall space possible? Upper floors get too few customers.';
     case 'NOTES_CONFLICT': return 'Your form says the space is "' + (a.spaceRaw || a.space) + '", but your notes say "' + a.notes + '". Which is right?';
     case 'EXP_CONFLICT': return 'Please confirm your years of retail experience (the form says ' + a.exp + '; business: "' + a.biz + '").';
+    case 'STATE_MISMATCH': return 'The form says state "' + a.state + '", but we open stores in Karnataka only. Which of the state, city and pin code is right?';
+    case 'FUNDING_OUTSIDE': return 'Can you share proof of the funds a co-investor or family member will put in?';
     case 'LOAN': return 'Has the loan been sanctioned? Please share the sanction letter.';
     case 'DUP_APPLICANT': return 'Is this your only application with us? Another application has the same name.';
     case 'LAUNCH_SOON': return 'Your target is ' + a.launch + ' month(s); the earliest realistic opening is about ' + r.feasible.toFixed(1) + ' months. Does that work?';

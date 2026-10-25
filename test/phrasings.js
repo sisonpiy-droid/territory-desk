@@ -86,7 +86,21 @@ const BROAD = [
   ['APP-012 has found a ground floor shop at pin 560050', /not in Tumakuru/i],
   ['APP-012 is doing much better now', /could not tell what changed/i],
   ['APP-002 is not going ahead', /withdrawn/i, { 'APP-001': 'Approve' }],
-  ['TER-02 can take 2 more stores', /open slots 1 to 3/i, { 'APP-019': 'Approve' }]
+  ['TER-02 can take 2 more stores', /open slots 1 to 3/i, { 'APP-019': 'Approve' }],
+  // operations questions
+  ['What should we do today?', /19 things need a person today/i],
+  ['how many slots are left in Mysuru', /TER-01 Mysuru.*0 open.*TER-02 Mysuru.*0 open/i],
+  ['which territories still have open slots', /7 slots are still open in 5 territories/i],
+  ['who is next in line for TER-02', /APP-019/],
+  ['who is waitlisted for pin 570001', /APP-001/],
+  ['list the approved applicants in Bengaluru', /2 approved applicants in Bengaluru.*APP-008.*APP-016/i],
+  ['which applicants prefer Hindi', /3 applicants who prefer Hindi.*APP-009.*APP-010.*APP-016/i],
+  ['how many on hold in Mysore', /2 on hold applicants in Mysuru/i],
+  ['which territories need more applicants', /5 territories need more applicants/i],
+  ['which offers are about to expire', /8 of 8 offers are not signed yet/i],
+  ['who is competing in TER-01', /TER-01 Mysuru has 5 applicants for 3 slots/i],
+  ['What happens if APP-002 declines the offer?', /would move.*Waitlist.*Approve.*Nothing has changed yet/i, { 'APP-002': 'Approve', 'APP-001': 'Waitlist' }],
+  ['If APP-002 doesnt sign, what changes?', /would move.*Waitlist.*Approve/i, { 'APP-001': 'Waitlist' }]
 ];
 
 let pass = 0, fail = 0;

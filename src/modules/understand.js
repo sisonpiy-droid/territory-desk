@@ -54,6 +54,7 @@ function fixWord(w) {
 }
 
 var SYN = [
+  [/\b(declines?|declined|will not sign|won'?t sign|wont sign|not signing|never signed|did not sign|didn'?t sign|does not sign|doesn'?t sign|lets? the offer (?:expire|lapse)|offer (?:expires|expired|lapses|lapsed))\b/gi, 'withdrew'],
   [/\b(quit|quits|has quit|is out|pulled out|not going ahead|not proceeding|no longer proceeding|gave up|has left|backed off|cancelled|canceled)\b/gi, 'withdrew'],
   [/\b(ground[-\s]?level|street[-\s]?level|street[-\s]?facing|road[-\s]?facing|groundfloor|gf)\b/gi, 'ground floor'],
   [/\bfirst[-\s]floor\b/gi, 'first floor'],
@@ -99,7 +100,7 @@ function split(text) {
 function isHypothetical(text) {
   var low = text.toLowerCase().trim();
   if (/\bwhat if\b/.test(low)) return false;   // "what if" is applied as a scenario with undo, as before
-  return /^(would|will|could|does|do|is|can|should|what happens|what would happen|suppose|imagine|assume|say)\b/.test(low) && /\bif\b|\bsuppose\b|\bimagine\b|\bassum/.test(low);
+  return /^(would|will|could|does|do|is|can|should|what happens|what would happen|suppose|imagine|assume|say|if)\b/.test(low) && /\bif\b|\bsuppose\b|\bimagine\b|\bassum/.test(low);
 }
 
 // Relative investment: "raised another 5 lakh"

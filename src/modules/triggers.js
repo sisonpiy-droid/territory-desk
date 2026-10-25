@@ -9,6 +9,7 @@ var TRIG = {
   INVEST_GAP: 'Proof of Rs {need} lakh arrives, or a co-investor joins',
   INVEST_MISSING: 'The applicant sends an investment figure',
   NOTES_CONFLICT: 'The applicant confirms whether the form or the notes are right',
+  STATE_MISMATCH: 'The applicant corrects the state, city or pin code',
   PIN_BAD: 'The applicant corrects the pin code',
   PIN_MISMATCH: 'The applicant corrects the pin code or the city',
   CITY_UNKNOWN: 'The applicant corrects the city',

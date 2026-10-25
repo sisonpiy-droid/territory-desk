@@ -9,7 +9,7 @@ var OUT_CLASS = { Approve: 'ok', Waitlist: 'wait', Hold: 'hold', Reject: 'no', W
 
 // Extension points so new features can live in their own files (src/modules/*.js load before this file, src/ext/*.js after it)
 window.DeskExt = window.DeskExt || {};
-['afterSummary', 'tabs', 'afterRender', 'answerers', 'afterDetail', 'afterRecompute', 'exportSheets', 'rowBadges', 'boardTerritory'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
+['afterSummary', 'tabs', 'afterRender', 'answerers', 'afterDetail', 'afterRecompute', 'exportSheets', 'rowBadges', 'boardTerritory', 'assumptions'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
 function extHtml() {
   return window.DeskExt.afterSummary.map(function (fn) { try { return fn(S) || ''; } catch (e) { return '<p class="muted pad">A section failed to load: ' + esc(e.message) + '</p>'; } }).join('');
 }
@@ -100,8 +100,8 @@ function addWeeks(w) { var d = new Date(); d.setDate(d.getDate() + w * 7); retur
 var NAV = [
   ['Today', ['overview', 'decisions', 'board']],
   ['Plan', ['sites', 'pipeplan', 'scen']],
-  ['Deliver', ['onboard', 'reports']],
-  ['Records', ['log', 'fair', 'assume']]
+  ['Deliver', ['offers', 'onboard', 'reports']],
+  ['Records', ['log', 'fair', 'assume', 'register']]
 ];
 var BUILTIN = { decisions: 'Decisions', board: 'Pin board', assume: 'Assumptions' };
 function pages() {
@@ -239,7 +239,7 @@ function decisionsHtml() {
 function rowHtml(a) {
   var r = S.run.res[a.id];
   if (a.withdrawn) {
-    return '<article class="row gone"><div class="row-h"><span class="rid">' + esc(a.id) + '</span><span class="rname">' + esc(a.name) + '</span><span class="rter"></span><span class="rout">' + pill('Withdrawn') + '</span><span class="rwhy muted">Withdrawn by applicant</span></div></article>';
+    return '<article class="row gone"><div class="row-h"><span class="rid">' + esc(a.id) + '</span><span class="rname">' + esc(a.name) + '</span><span class="rter"></span><span class="rout">' + pill('Withdrawn') + '</span><span class="rwhy muted">' + esc(a.withdrawnReason || 'Withdrawn by applicant') + '</span></div></article>';
   }
   var x = E.explain(r, a, { cfg: S.cfg, run: S.run });
   var open = !!S.open[a.id];

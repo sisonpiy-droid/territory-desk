@@ -686,6 +686,18 @@ function evaluateApp(a, ctx) {
   } else if (a.floor === 'Upper' && /ground[\s-]?floor/.test(notes) && !/looking|searching|prefer|want|need/.test(notes)) {
     add('NOTES_CONFLICT', 'hold', 'Notes contradict the form', 'The form says upper floor, but the notes mention a ground-floor shop.');
   }
+  // numbers and floors in the notes that disagree with the form
+  if (!issues.some(function (i) { return i.code === 'NOTES_CONFLICT'; })) {
+    var said = [], rxS = /(\d{2,5})\s*(?:sq\.?\s?ft|sqft|square\s*feet|sft)\b/g, mS;
+    while ((mS = rxS.exec(notes))) said.push(+mS[1]);
+    var badSize = hasSpace && a.size && said.filter(function (v) { return Math.abs(v - a.size) / a.size > 0.25; })[0];
+    var mI = !/co-?invest|partner|family|brother|father|relative|\badd\b|extra|more|additional|loan/.test(notes) && /(?:invest\w*|capital|budget|savings)\D{0,20}?(?:rs\.?\s*)?(\d+(?:\.\d+)?)\s*(lakhs?|lacs?|crores?|cr)\b/.exec(notes);
+    var saidInvest = mI ? parseFloat(mI[1]) * (/^cr/.test(mI[2]) ? 100 : 1) : null;
+    if (badSize) add('NOTES_CONFLICT', 'hold', 'Notes contradict the form', 'The form says ' + a.size + ' sq ft, but the notes say ' + badSize + ' sq ft.');
+    else if (saidInvest && a.invest > 0 && Math.abs(saidInvest - a.invest) / a.invest > 0.2) add('NOTES_CONFLICT', 'hold', 'Notes contradict the form', 'The form says Rs ' + a.invest + ' lakh, but the notes say Rs ' + saidInvest + ' lakh.');
+    else if ((a.floor === 'Ground' || a.floor === 'Mall unit') && /\b(first|1st|second|2nd|upper|terrace)\s*floor/.test(notes) && !/looking|searching|prefer|want|need|would like/.test(notes)) add('NOTES_CONFLICT', 'hold', 'Notes contradict the form', 'The form says ' + a.floor.toLowerCase() + ', but the notes mention an upper floor.');
+  }
+  if (a.state && !/^(ka|karnataka|karnatka)\.?$/i.test(a.state.trim())) add('STATE_MISMATCH', 'hold', 'State is not Karnataka', 'The form says "' + a.state + '", but the brand opens stores in Karnataka only. One of state, city and pin code is wrong.');
 
   /* ---- soft flags: do not block, but lower confidence ---- */
   if (a.exp === 0 && /\b(run|runs|running|owner|owns|own|manage|manages|managing|operate|operates)\b[^.]{0,30}\b(shop|store|retail|showroom|outlet)/i.test(a.biz)) {
@@ -695,6 +707,8 @@ function evaluateApp(a, ctx) {
   }
   if (/\b(loan|bank|finance|mudra|borrow|subsidy|sanction)/.test(notesAll)) {
     add('LOAN', 'soft', 'Funding depends on a loan', 'The notes suggest part of the investment depends on a loan that may not be sanctioned yet.');
+  } else if (/co-?invest|\binvestor\b|partner will|family will|brother|father|relative|friends?\b/.test(notesAll)) {
+    add('FUNDING_OUTSIDE', 'soft', 'Part of the funding comes from someone else', 'The notes suggest a co-investor or family member is putting in part of the money, which is not yet proven.');
   }
   var nk = a.name.trim().toLowerCase();
   if (ctx.nameCount[nk] > 1) add('DUP_APPLICANT', 'soft', 'Same name on several applications', 'Another application carries the same applicant name; possible duplicate.');
@@ -765,6 +779,7 @@ function evaluateApp(a, ctx) {
   if (a.sizeAssumed) cond.push('Confirm the space is at least ' + cfg.minSpace + ' sq ft before the agreement is signed');
   if (hasSpace && a.floor === 'Not known') cond.push('Confirm the floor (ground floor or mall unit)');
   if (issues.some(function (i) { return i.code === 'LOAN'; })) cond.push('Show the loan sanction letter as proof of funds');
+  if (issues.some(function (i) { return i.code === 'FUNDING_OUTSIDE'; })) cond.push('Show proof of funds from the co-investor or family');
   if (issues.some(function (i) { return i.code === 'EXP_CONFLICT'; })) cond.push('Verify past retail experience during KYC');
   if (issues.some(function (i) { return i.code === 'DUP_APPLICANT'; })) cond.push('Confirm this is the only application from this person');
   if (a.space === 'Rented') cond.push('Registered lease for the space');
@@ -903,7 +918,7 @@ function simulateFixed(a, core0, apps, territories, stores, cfg) {
       case 'PIN_HAS_STORE': case 'PIN_OUTSIDE':
         if (fp.length) { b.pin = fp[0].pin; fixes.push('Take free pin ' + fp[0].pin + ' in ' + fp[0].ter); } else { possible = false; why = 'no_free_pin'; }
         break;
-      case 'PIN_MISMATCH': case 'PIN_BAD': case 'CITY_UNKNOWN': possible = false; why = 'pin_unknown'; break;
+      case 'PIN_MISMATCH': case 'PIN_BAD': case 'CITY_UNKNOWN': case 'STATE_MISMATCH': possible = false; why = 'pin_unknown'; break;
       case 'NO_SPACE': b.space = 'Rented'; b.size = cfg.idealMin; b.floor = 'Ground'; b.sizeAssumed = false; b.notesSuperseded = true; fixes.push('Find a rented ground-floor space of about ' + cfg.idealMin + ' sq ft'); break;
       case 'SIZE_MISSING': b.size = cfg.idealMin; fixes.push('Confirm a space of at least ' + cfg.idealMin + ' sq ft'); break;
       case 'SIZE_SMALL': b.size = cfg.idealMin; fixes.push('Move to a space of at least ' + cfg.idealMin + ' sq ft'); break;
@@ -1049,6 +1064,7 @@ function onboardingPlan(r, a, state) {
 var ASK = {
   PIN_BAD: { en: 'a valid 6-digit pin code', hi: 'सही 6 अंकों का पिन कोड', kn: 'ಸರಿಯಾದ 6 ಅಂಕಿಯ ಪಿನ್ ಕೋಡ್' },
   PIN_MISMATCH: { en: 'the correct pin code and city (the two do not match)', hi: 'सही पिन कोड और शहर (दोनों मेल नहीं खाते)', kn: 'ಸರಿಯಾದ ಪಿನ್ ಕೋಡ್ ಮತ್ತು ನಗರ (ಇವೆರಡೂ ಹೊಂದಿಕೆಯಾಗುತ್ತಿಲ್ಲ)' },
+  STATE_MISMATCH: { en: 'the correct state, city and pin code (the state is not Karnataka)', hi: 'सही राज्य, शहर और पिन कोड (राज्य कर्नाटक नहीं है)', kn: 'ಸರಿಯಾದ ರಾಜ್ಯ, ನಗರ ಮತ್ತು ಪಿನ್ ಕೋಡ್ (ರಾಜ್ಯ ಕರ್ನಾಟಕ ಅಲ್ಲ)' },
   CITY_UNKNOWN: { en: 'your city', hi: 'आपका शहर', kn: 'ನಿಮ್ಮ ನಗರ' },
   PIN_HAS_STORE: { en: 'a different pin code (we already have a store in this one)', hi: 'कोई दूसरा पिन कोड (इस पिन कोड में हमारा स्टोर पहले से है)', kn: 'ಬೇರೆ ಪಿನ್ ಕೋಡ್ (ಈ ಪಿನ್ ಕೋಡ್‌ನಲ್ಲಿ ನಮ್ಮ ಅಂಗಡಿ ಈಗಾಗಲೇ ಇದೆ)' },
   PIN_OUTSIDE: { en: 'a pin code inside our current expansion areas', hi: 'हमारे वर्तमान विस्तार क्षेत्रों के भीतर का पिन कोड', kn: 'ನಮ್ಮ ಪ್ರಸ್ತುತ ವಿಸ್ತರಣಾ ಪ್ರದೇಶಗಳೊಳಗಿನ ಪಿನ್ ಕೋಡ್' },
@@ -1410,6 +1426,139 @@ root.DeskGoLive = api;
 
 </script>
 <script>
+/* modules\levers.js */
+// Territory levers: for a territory that is not filling (or is over-subscribed), name the lever, the owner and why.
+// Deliberately qualitative: no rupee figures. Money appears only if the team types its own cost and value, and then only as a break-even.
+(function (root) {
+'use strict';
+var E = root.Engine || (typeof require !== 'undefined' ? require('../engine.js') : null);
+
+// owner names are assumptions: edit them to the brand's real roles
+var LEVERS = {
+  holds: { name: 'Clear the holds', owner: 'Expansion team' },
+  outreach: { name: 'Local outreach', owner: 'Regional business development' },
+  referrals: { name: 'Partner referrals', owner: 'Franchise relations' },
+  support: { name: 'Launch support', owner: 'Training team' },
+  pins: { name: 'Review the pin list', owner: 'Expansion head' },
+  capacity: { name: 'Decide on capacity', owner: 'Expansion head' }
+};
+
+// row: one entry of planner.plan(S).rows. Returns [{ key, name, owner, why }] in the order to act.
+function levers(S, row, owners) {
+  owners = owners || {};
+  var out = [], city = row.city, t = S.ters.filter(function (x) { return x.id === row.id; })[0];
+  var add = function (key, why) { out.push({ key: key, name: LEVERS[key].name, owner: owners[key] || LEVERS[key].owner, why: why }); };
+  var waiting = S.apps.filter(function (a) { var r = S.run.res[a.id]; return !a.withdrawn && r && r.outcome === 'Waitlist' && r.waitReason === 'territory_full' && r.ter && r.ter.id === row.id; });
+  if (row.open > 0) {
+    if (row.pins.length < row.open) add('pins', 'Only ' + row.pins.length + ' free pin' + (row.pins.length === 1 ? '' : 's') + ' for ' + row.open + ' open slot' + (row.open === 1 ? '' : 's') + ': ask the brand whether the territory can take more pins.');
+    if (row.fixable.length) add('holds', row.fixable.join(', ') + ' ' + (row.fixable.length === 1 ? 'is' : 'are') + ' one fix away from approval and would fill ' + Math.min(row.fixable.length, row.open) + ' slot' + (Math.min(row.fixable.length, row.open) === 1 ? '' : 's') + '.');
+    if (row.received === 0) {
+      add('outreach', 'No application has come from this territory yet.');
+      add('referrals', 'Ask partners in neighbouring territories and existing store owners for introductions.');
+    } else if (!row.fixable.length) {
+      add('outreach', row.received + ' application' + (row.received === 1 ? '' : 's') + ' came in but none can go ahead, so the territory needs more local interest.');
+    }
+    var hasStore = E.STORES.some(function (s) { return s.city === city; });
+    if (!hasStore || (t && t.tier === 'Tier 3')) {
+      var mentor = E.NEAREST_CITY[city] || null;
+      add('support', (hasStore ? 'A smaller town: ' : 'First store in ' + city + ': ') + 'plan extra launch support' + (mentor ? ' (the nearest trained team is in ' + mentor + ')' : '') + ' to make the first partner confident.');
+    }
+  } else if (waiting.length) {
+    add('capacity', waiting.length + ' eligible applicant' + (waiting.length === 1 ? ' is' : 's are') + ' waitlisted (' + waiting.map(function (a) { return a.id; }).join(', ') + '): decide whether to add a slot or offer alternative pins.');
+  }
+  return out;
+}
+
+// break-even months for an incentive, from numbers the team types. Never filled in by default.
+function breakEven(cost, valuePerMonth) {
+  cost = parseFloat(cost); valuePerMonth = parseFloat(valuePerMonth);
+  if (!(cost > 0) || !(valuePerMonth > 0)) return null;
+  return cost / valuePerMonth;
+}
+
+var api = { LEVERS: LEVERS, levers: levers, breakEven: breakEven };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.DeskLevers = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+/* modules\offers.js */
+// Conditional offers: every approval is an offer with a deadline. When an offer is not signed in time (or is declined),
+// the pin and slot are released and the next waitlisted applicant is promoted automatically, with a fresh deadline.
+// No drop-off rate is needed: nothing is offered twice, so the one-store-per-pin rule always holds.
+// State on S: S.offerAt { id: ISO date the offer was made }, S.signed { id: true }. Offers are derived from the decisions,
+// so Undo and every what-if keep them consistent.
+(function (root) {
+'use strict';
+var E = root.Engine || (typeof require !== 'undefined' ? require('../engine.js') : null);
+var DAY = 86400000;
+var DEFAULTS = { validDays: 7 };   // assumption: check against the median days from approval to signing in the brand's last approvals
+
+function approvedIds(S) { return S.apps.filter(function (a) { return !a.withdrawn && S.run.res[a.id] && S.run.res[a.id].outcome === 'Approve'; }).map(function (a) { return a.id; }); }
+
+// Called after every recompute: new approvals get an offer dated now; anything no longer approved loses its offer.
+function sync(S, now) {
+  S.offerAt = S.offerAt || {}; S.signed = S.signed || {};
+  var ap = {}; approvedIds(S).forEach(function (id) { ap[id] = 1; if (!S.offerAt[id]) S.offerAt[id] = new Date(now).toISOString(); });
+  Object.keys(S.offerAt).forEach(function (id) { if (!ap[id]) { delete S.offerAt[id]; delete S.signed[id]; } });
+}
+
+// who would be promoted if these offers lapsed: a what-if run on a copy, never touching the live decisions
+function promotedIf(S, ids) {
+  var gone = {}; ids.forEach(function (id) { gone[id] = 1; });
+  var apps = S.apps.map(function (a) { if (!gone[a.id]) return a; var b = JSON.parse(JSON.stringify(a)); b.withdrawn = true; return b; });
+  var r2 = E.run(apps, S.ters, E.STORES, S.cfg), out = [];
+  apps.forEach(function (a) {
+    if (a.withdrawn || gone[a.id] || !r2.res[a.id] || r2.res[a.id].outcome !== 'Approve') return;
+    var was = S.run.res[a.id]; if (was && was.outcome === 'Approve') return;
+    out.push({ id: a.id, name: a.name, pin: a.pin, ter: r2.res[a.id].ter ? r2.res[a.id].ter.id : '' });
+  });
+  return out;
+}
+
+function list(S, now, cfg) {
+  cfg = cfg || DEFAULTS;
+  var t = new Date(now).getTime();
+  var rows = approvedIds(S).map(function (id) {
+    var a = S.apps.filter(function (x) { return x.id === id; })[0], r = S.run.res[id];
+    var at = new Date(S.offerAt && S.offerAt[id] ? S.offerAt[id] : now), dl = new Date(at.getTime() + cfg.validDays * DAY);
+    var left = Math.ceil((dl.getTime() - t) / DAY), signed = !!(S.signed && S.signed[id]);
+    return { id: id, name: a.name, pin: a.pin, ter: r.ter ? r.ter.id : '', lang: a.lang || 'English', offeredAt: at, deadline: dl, daysLeft: left,
+             status: signed ? 'Signed' : t > dl.getTime() ? 'Expired' : left <= 2 ? 'Due soon' : 'Open', signed: signed,
+             next: signed ? [] : promotedIf(S, [id]) };
+  });
+  var rank = { Expired: 0, 'Due soon': 1, Open: 2, Signed: 3 };
+  return rows.sort(function (p, q) { return rank[p.status] - rank[q.status] || p.deadline - q.deadline || (p.id < q.id ? -1 : 1); });
+}
+
+// all expired, unsigned offers at once, and who is promoted because of them
+function expire(S, now, cfg) {
+  var ex = list(S, now, cfg).filter(function (o) { return o.status === 'Expired'; }).map(function (o) { return o.id; });
+  return { lapsed: ex, promoted: ex.length ? promotedIf(S, ex) : [] };
+}
+
+var SENT = {
+  en: ' Please confirm and sign by {date}; after that the place goes to the next applicant.',
+  hi: ' कृपया {date} तक पुष्टि करें और हस्ताक्षर करें; उसके बाद यह स्थान अगले आवेदक को दे दिया जाएगा।',
+  kn: ' ದಯವಿಟ್ಟು {date} ರೊಳಗೆ ದೃಢೀಕರಿಸಿ ಮತ್ತು ಸಹಿ ಮಾಡಿ; ಅದರ ನಂತರ ಈ ಸ್ಥಾನ ಮುಂದಿನ ಅರ್ಜಿದಾರರಿಗೆ ಹೋಗುತ್ತದೆ.'
+};
+function fmt(d) { return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); }
+// the approval letter, in the applicant's language, with the deadline
+function message(S, id, deadline, lang) {
+  var a = S.apps.filter(function (x) { return x.id === id; })[0], r = S.run.res[id];
+  lang = lang || a.lang || 'English';
+  return E.letter(r, a, lang, S.cfg) + fill(SENT[E.LANGKEY[lang] || 'en'], { date: fmt(deadline) });
+}
+function fill(s, m) { return s.replace(/\{(\w+)\}/g, function (_, k) { return m[k]; }); }
+
+var api = { DEFAULTS: DEFAULTS, sync: sync, list: list, promotedIf: promotedIf, expire: expire, message: message, fmt: fmt };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+root.DeskOffers = api;
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
 /* modules\ops.js */
 // Operations view logic: pipeline and leakage, the team's worklist, territory health, before and after, adoption metrics.
 // Pure functions of the app state S ({ apps, ters, run, cfg, overrides? }). No DOM here.
@@ -1652,7 +1801,23 @@ function band(a, tierFloor, cfg) {
 // the calibration claim, checked: base-case months for a Rs 25 and a Rs 35 lakh store
 function calibration(cfg) { cfg = cfg || DEFAULTS; return { low: months(25, cfg.sales.base, cfg), high: months(35, cfg.sales.base, cfg) }; }
 
-var api = { DEFAULTS: DEFAULTS, months: months, band: band, calibration: calibration };
+// The bad-six-months test: what a store does if sales run at a share of the base case for six months.
+// spare = money the applicant has beyond the store cost (their stated investment minus the tier floor, from the file).
+// Illustrative: it uses the same placeholder sales, margin and running costs as the payback band.
+var STRESS_PCTS = [50, 70, 90];
+function stress(invest, spare, cfg, pcts) {
+  cfg = cfg || DEFAULTS; pcts = pcts || STRESS_PCTS; spare = Math.max(0, spare || 0);
+  var breakEven = cfg.running / cfg.margin;   // monthly sales (Rs lakh) at which the store just covers its running costs
+  return {
+    breakEvenSales: breakEven, breakEvenPct: Math.round(100 * breakEven / cfg.sales.base),
+    rows: pcts.map(function (p) {
+      var sales = cfg.sales.base * p / 100, monthly = sales * cfg.margin - cfg.running;
+      return { pct: p, sales: sales, monthly: monthly, six: monthly * 6, payback: monthly > 0 ? invest / monthly : null, runway: monthly < 0 ? (spare > 0 ? spare / -monthly : 0) : null };
+    })
+  };
+}
+
+var api = { DEFAULTS: DEFAULTS, months: months, band: band, calibration: calibration, stress: stress, STRESS_PCTS: STRESS_PCTS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.DeskPayback = api;
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -1806,6 +1971,8 @@ function q(i, a, r, S) {
     case 'FLOOR_UPPER': return 'Is a ground-floor or mall space possible? Upper floors get too few customers.';
     case 'NOTES_CONFLICT': return 'Your form says the space is "' + (a.spaceRaw || a.space) + '", but your notes say "' + a.notes + '". Which is right?';
     case 'EXP_CONFLICT': return 'Please confirm your years of retail experience (the form says ' + a.exp + '; business: "' + a.biz + '").';
+    case 'STATE_MISMATCH': return 'The form says state "' + a.state + '", but we open stores in Karnataka only. Which of the state, city and pin code is right?';
+    case 'FUNDING_OUTSIDE': return 'Can you share proof of the funds a co-investor or family member will put in?';
     case 'LOAN': return 'Has the loan been sanctioned? Please share the sanction letter.';
     case 'DUP_APPLICANT': return 'Is this your only application with us? Another application has the same name.';
     case 'LAUNCH_SOON': return 'Your target is ' + a.launch + ' month(s); the earliest realistic opening is about ' + r.feasible.toFixed(1) + ' months. Does that work?';
@@ -1910,6 +2077,7 @@ var TRIG = {
   INVEST_GAP: 'Proof of Rs {need} lakh arrives, or a co-investor joins',
   INVEST_MISSING: 'The applicant sends an investment figure',
   NOTES_CONFLICT: 'The applicant confirms whether the form or the notes are right',
+  STATE_MISMATCH: 'The applicant corrects the state, city or pin code',
   PIN_BAD: 'The applicant corrects the pin code',
   PIN_MISMATCH: 'The applicant corrects the pin code or the city',
   CITY_UNKNOWN: 'The applicant corrects the city',
@@ -2010,6 +2178,7 @@ function fixWord(w) {
 }
 
 var SYN = [
+  [/\b(declines?|declined|will not sign|won'?t sign|wont sign|not signing|never signed|did not sign|didn'?t sign|does not sign|doesn'?t sign|lets? the offer (?:expire|lapse)|offer (?:expires|expired|lapses|lapsed))\b/gi, 'withdrew'],
   [/\b(quit|quits|has quit|is out|pulled out|not going ahead|not proceeding|no longer proceeding|gave up|has left|backed off|cancelled|canceled)\b/gi, 'withdrew'],
   [/\b(ground[-\s]?level|street[-\s]?level|street[-\s]?facing|road[-\s]?facing|groundfloor|gf)\b/gi, 'ground floor'],
   [/\bfirst[-\s]floor\b/gi, 'first floor'],
@@ -2055,7 +2224,7 @@ function split(text) {
 function isHypothetical(text) {
   var low = text.toLowerCase().trim();
   if (/\bwhat if\b/.test(low)) return false;   // "what if" is applied as a scenario with undo, as before
-  return /^(would|will|could|does|do|is|can|should|what happens|what would happen|suppose|imagine|assume|say)\b/.test(low) && /\bif\b|\bsuppose\b|\bimagine\b|\bassum/.test(low);
+  return /^(would|will|could|does|do|is|can|should|what happens|what would happen|suppose|imagine|assume|say|if)\b/.test(low) && /\bif\b|\bsuppose\b|\bimagine\b|\bassum/.test(low);
 }
 
 // Relative investment: "raised another 5 lakh"
@@ -2176,7 +2345,7 @@ var OUT_CLASS = { Approve: 'ok', Waitlist: 'wait', Hold: 'hold', Reject: 'no', W
 
 // Extension points so new features can live in their own files (src/modules/*.js load before this file, src/ext/*.js after it)
 window.DeskExt = window.DeskExt || {};
-['afterSummary', 'tabs', 'afterRender', 'answerers', 'afterDetail', 'afterRecompute', 'exportSheets', 'rowBadges', 'boardTerritory'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
+['afterSummary', 'tabs', 'afterRender', 'answerers', 'afterDetail', 'afterRecompute', 'exportSheets', 'rowBadges', 'boardTerritory', 'assumptions'].forEach(function (k) { window.DeskExt[k] = window.DeskExt[k] || []; });
 function extHtml() {
   return window.DeskExt.afterSummary.map(function (fn) { try { return fn(S) || ''; } catch (e) { return '<p class="muted pad">A section failed to load: ' + esc(e.message) + '</p>'; } }).join('');
 }
@@ -2267,8 +2436,8 @@ function addWeeks(w) { var d = new Date(); d.setDate(d.getDate() + w * 7); retur
 var NAV = [
   ['Today', ['overview', 'decisions', 'board']],
   ['Plan', ['sites', 'pipeplan', 'scen']],
-  ['Deliver', ['onboard', 'reports']],
-  ['Records', ['log', 'fair', 'assume']]
+  ['Deliver', ['offers', 'onboard', 'reports']],
+  ['Records', ['log', 'fair', 'assume', 'register']]
 ];
 var BUILTIN = { decisions: 'Decisions', board: 'Pin board', assume: 'Assumptions' };
 function pages() {
@@ -2406,7 +2575,7 @@ function decisionsHtml() {
 function rowHtml(a) {
   var r = S.run.res[a.id];
   if (a.withdrawn) {
-    return '<article class="row gone"><div class="row-h"><span class="rid">' + esc(a.id) + '</span><span class="rname">' + esc(a.name) + '</span><span class="rter"></span><span class="rout">' + pill('Withdrawn') + '</span><span class="rwhy muted">Withdrawn by applicant</span></div></article>';
+    return '<article class="row gone"><div class="row-h"><span class="rid">' + esc(a.id) + '</span><span class="rname">' + esc(a.name) + '</span><span class="rter"></span><span class="rout">' + pill('Withdrawn') + '</span><span class="rwhy muted">' + esc(a.withdrawnReason || 'Withdrawn by applicant') + '</span></div></article>';
   }
   var x = E.explain(r, a, { cfg: S.cfg, run: S.run });
   var open = !!S.open[a.id];
@@ -3374,6 +3543,7 @@ function fmtT(d) { return d.toLocaleString('en-IN', { day: 'numeric', month: 'sh
 function appLink(id) { return '<button class="link" data-act="open-app" data-v="' + esc(id) + '">' + esc(id) + '</button>'; }
 function short(id) { var a = D.getApp(id), r = S.run.res[id]; return a && r ? E.explain(r, a, { cfg: S.cfg, run: S.run }).short || '' : ''; }
 function log(e) { e.at = new Date(); S.log.push(e); }
+D.log = log;   // other pages add to the decision log through this
 
 /* ---------- decision log: every decision, override, what-if and change ---------- */
 window.DeskExt.afterRecompute.push(function (diff, first, cause) {
@@ -3715,6 +3885,118 @@ document.addEventListener('pointerdown', safe(function (e) {
 
 </script>
 <script>
+/* ext\offers.js */
+// Offers page: every approval is an offer with a deadline; an offer that is not signed in time lapses and the next
+// waitlisted applicant is promoted automatically. Logic in src/modules/offers.js.
+(function () {
+'use strict';
+var D = window.__desk, S = D.S, esc = D.esc, pill = D.pill, OF = window.DeskOffers;
+var cfg = JSON.parse(JSON.stringify(OF.DEFAULTS));
+var DAY = 86400000;
+function clock() { return new Date(Date.now() + (S.clockDays || 0) * DAY); }
+function appLink(id) { return '<button class="link" data-act="open-app" data-v="' + esc(id) + '">' + esc(id) + '</button>'; }
+function log(kind, id, text) { if (D.log) D.log({ kind: kind, id: id, text: text }); }
+
+window.DeskExt.afterRecompute.push(function (diff, first) {
+  if (first) { S.offerAt = {}; S.signed = {}; S.clockDays = 0; }
+  OF.sync(S, clock());
+});
+
+/* ---------- actions ---------- */
+function lapse(ids, reason, kind, text) {
+  if (!ids.length) return '';
+  var promo = OF.promotedIf(S, ids);
+  D.pushUndo();
+  ids.forEach(function (id) { var a = D.getApp(id); if (a) { a.withdrawn = true; a.withdrawnReason = reason; } });
+  S.cause = { kind: 'Offer', text: text };
+  D.recompute(); S.cause = null;
+  var dl = new Date(clock().getTime() + cfg.validDays * DAY);
+  var html = '<p class="ap">' + esc(text) + '</p>' + (promo.length ? '<p><b>Promoted automatically</b> (new offer, valid until ' + esc(OF.fmt(dl)) + '):</p><ul class="diff">' + promo.map(function (p) { return '<li>' + appLink(p.id) + ' ' + esc(p.name) + ', pin ' + esc(p.pin) + (p.ter ? ' in ' + esc(p.ter) : '') + '</li>'; }).join('') + '</ul>' : '<p class="muted">Nobody is waiting behind ' + (ids.length > 1 ? 'these offers' : 'this offer') + ', so the slot' + (ids.length > 1 ? 's stay' : ' stays') + ' open.</p>');
+  S.askLog.push({ who: 'desk', html: html });
+  D.rerender();
+  return html;
+}
+
+/* ---------- page ---------- */
+function tabHtml() {
+  var now = clock(), rows = OF.list(S, now, cfg), ex = OF.expire(S, now, cfg);
+  var n = { Open: 0, 'Due soon': 0, Expired: 0, Signed: 0 }; rows.forEach(function (o) { n[o.status]++; });
+  var tile = function (big, label, tone) { return '<div class="of-k ' + (tone || '') + '"><b>' + big + '</b><span>' + label + '</span></div>'; };
+  var pillOf = function (o) {
+    var c = { Signed: 'ok', Expired: 'no', 'Due soon': 'hold', Open: 'wait' }[o.status];
+    return '<span class="pill ' + c + '">' + (o.status === 'Open' || o.status === 'Due soon' ? o.daysLeft + (o.daysLeft === 1 ? ' day left' : ' days left') : o.status) + '</span>';
+  };
+  var body = rows.map(function (o) {
+    var next = o.signed ? '<span class="muted">Signed: pin is held</span>' : o.next.length ? 'Promotes ' + o.next.map(function (p) { return appLink(p.id); }).join(', ') : '<span class="muted">Nobody waiting; slot stays open</span>';
+    var acts = o.signed ? '<button class="btn sm" data-act="of-unsign" data-id="' + esc(o.id) + '">Undo signed</button>' :
+      (o.status === 'Expired' ? '<button class="btn sm primary" data-act="of-lapse" data-id="' + esc(o.id) + '">Lapse and promote</button> ' : '') +
+      '<button class="btn sm" data-act="of-sign" data-id="' + esc(o.id) + '">Mark signed</button> <button class="btn sm" data-act="of-decline" data-id="' + esc(o.id) + '">Declined</button> ' +
+      '<button class="btn sm" data-act="of-copy" data-id="' + esc(o.id) + '">Copy offer (' + esc(o.lang) + ')</button>';
+    return '<tr><td>' + appLink(o.id) + ' ' + esc(o.name) + '</td><td>' + esc(o.pin) + ' · ' + esc(o.ter) + '</td><td>' + esc(OF.fmt(o.offeredAt)) + '</td><td>' + esc(OF.fmt(o.deadline)) + '</td><td>' + pillOf(o) + '</td><td>' + next + '</td><td class="of-a">' + acts + '</td></tr>';
+  }).join('');
+  var banner = ex.lapsed.length ? '<div class="of-ban"><div><b>' + ex.lapsed.length + ' offer' + (ex.lapsed.length === 1 ? ' has' : 's have') + ' passed the deadline.</b> Lapsing ' + (ex.lapsed.length === 1 ? 'it releases' : 'them releases') + ' the pin' + (ex.lapsed.length === 1 ? '' : 's') + ' and ' + (ex.promoted.length ? 'promotes ' + ex.promoted.map(function (p) { return esc(p.id) + ' (' + esc(p.pin) + ')'; }).join(', ') : 'frees the slot' + (ex.lapsed.length === 1 ? '' : 's') + ', with nobody waiting') + '.</div><button class="btn primary" data-act="of-lapse-all">Lapse all expired</button></div>' : '';
+  var hist = (S.log || []).filter(function (e) { return e.kind === 'Offer'; }).slice(-6).reverse();
+  return '<div class="of"><p class="muted sm">Every approval is an offer with a deadline. If it is not signed in time, the pin is released and the next waitlisted applicant is promoted automatically, so a pin is never offered twice.</p>' +
+    '<div class="of-tiles">' + tile(n.Open + n['Due soon'], 'open offers') + tile(n['Due soon'], 'due within 2 days', n['Due soon'] ? 'warn' : '') + tile(n.Expired, 'past the deadline', n.Expired ? 'bad' : '') + tile(n.Signed, 'signed', 'good') + '</div>' + banner +
+    '<div class="of-clock"><label>Offer window <input type="number" min="1" step="1" value="' + cfg.validDays + '" data-of="validDays"> days</label>' +
+      '<span class="of-sep"></span><span>View as of <b>' + esc(OF.fmt(now)) + '</b>' + (S.clockDays ? ' (+' + S.clockDays + ' days)' : '') + '</span><button class="btn sm" data-act="of-day" data-v="1">+1 day</button><button class="btn sm" data-act="of-day" data-v="7">+7 days</button><button class="btn sm" data-act="of-day" data-v="0">Today</button></div>' +
+    (rows.length ? '<div class="tscroll"><table class="cmp of-t"><thead><tr><th>Partner</th><th>Pin · territory</th><th>Offered</th><th>Deadline</th><th>Status</th><th>If it lapses</th><th></th></tr></thead><tbody>' + body + '</tbody></table></div>' : '<p class="muted pad">No approved applicants, so no offers yet.</p>') +
+    (hist.length ? '<h4 class="mt">Recent offer activity</h4><ul class="of-h">' + hist.map(function (e) { return '<li>' + esc(e.text) + '</li>'; }).join('') + '</ul>' : '') + '</div>';
+}
+window.DeskExt.tabs.push({ id: 'offers', label: 'Offers', render: tabHtml, badge: function () { if (!S.run) return ''; var r = OF.list(S, clock(), cfg).filter(function (o) { return o.status === 'Expired' || o.status === 'Due soon'; }).length; return r || ''; } });
+
+// the plan section of a record shows where its offer stands
+window.DeskExt.afterDetail.push({ group: 'plan', fn: function (a, r) {
+  if (r.outcome !== 'Approve') return '';
+  var o = OF.list(S, clock(), cfg).filter(function (x) { return x.id === a.id; })[0]; if (!o) return '';
+  return '<h4>Offer</h4><p>' + (o.signed ? 'Signed. The pin is held.' : 'Offered ' + esc(OF.fmt(o.offeredAt)) + '; sign by <b>' + esc(OF.fmt(o.deadline)) + '</b> (' + (o.status === 'Expired' ? 'deadline passed' : o.daysLeft + ' day' + (o.daysLeft === 1 ? '' : 's') + ' left') + ').') + ' <button class="link" data-act="tab" data-v="offers">Open offers</button></p>';
+} });
+
+window.DeskExt.exportSheets.push(function () {
+  return { name: 'Offers', rows: [['Application', 'Applicant', 'Pin', 'Territory', 'Offered', 'Deadline', 'Status', 'Promotes if it lapses']].concat(OF.list(S, clock(), cfg).map(function (o) { return [o.id, o.name, o.pin, o.ter, OF.fmt(o.offeredAt), OF.fmt(o.deadline), o.status, o.next.map(function (p) { return p.id; }).join(', ')]; })) };
+});
+window.DeskExt.assumptions.push(function () {
+  return [{ area: 'Offers', name: 'Offer window (days to sign)', def: OF.DEFAULTS.validDays + ' days', now: cfg.validDays + ' days', where: 'Offers page', how: 'Median days from approval to signed agreement in the brand\'s last 10 approvals; set the window to the 80th percentile.' }];
+});
+
+/* ---------- events ---------- */
+document.addEventListener('click', function (e) {
+  var el = e.target.closest && e.target.closest('[data-act^="of-"]'); if (!el) return;
+  var act = el.getAttribute('data-act'), id = el.getAttribute('data-id'), a = id ? D.getApp(id) : null, now = clock();
+  if (act === 'of-day') { var v = +el.getAttribute('data-v'); S.clockDays = v ? (S.clockDays || 0) + v : 0; OF.sync(S, clock()); D.rerender(); }
+  else if (act === 'of-sign') { S.signed[id] = true; S.stages[id] = Math.max(S.stages[id] || 0, 2); log('Offer', id, id + ' ' + a.name + ' signed the agreement'); D.rerender(); }
+  else if (act === 'of-unsign') { delete S.signed[id]; log('Offer', id, id + ' marked not signed'); D.rerender(); }
+  else if (act === 'of-decline') lapse([id], 'Declined the offer', 'Offer', id + ' ' + a.name + ' declined the offer');
+  else if (act === 'of-lapse') lapse([id], 'Offer expired on ' + OF.fmt(now), 'Offer', 'Offer to ' + id + ' ' + a.name + ' lapsed after ' + cfg.validDays + ' days');
+  else if (act === 'of-lapse-all') { var ex = OF.expire(S, now, cfg); lapse(ex.lapsed, 'Offer expired on ' + OF.fmt(now), 'Offer', ex.lapsed.length + ' expired offer' + (ex.lapsed.length === 1 ? '' : 's') + ' lapsed (' + ex.lapsed.join(', ') + ')'); }
+  else if (act === 'of-copy') {
+    var o = OF.list(S, now, cfg).filter(function (x) { return x.id === id; })[0], txt = OF.message(S, id, o.deadline), label = el.textContent;
+    var done = function () { el.textContent = 'Copied'; setTimeout(function () { el.textContent = label; }, 1400); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, done); else done();
+  }
+});
+document.addEventListener('change', function (e) {
+  if (!e.target.getAttribute || e.target.getAttribute('data-of') !== 'validDays') return;
+  var v = parseInt(e.target.value, 10); if (isNaN(v) || v < 1) return;
+  cfg.validDays = v; D.rerender();
+});
+
+var css = document.createElement('style');
+css.textContent = [
+  '.of-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }',
+  '.of-k { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; } .of-k b { font-family: var(--display); font-size: 24px; line-height: 1.1; font-weight: 800; } .of-k span { font-size: 12.5px; color: var(--muted); }',
+  '.of-k.warn b { color: var(--hold); } .of-k.bad b { color: var(--no); } .of-k.good b { color: var(--ok); }',
+  '.of-ban { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--no) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--no) 30%, transparent); font-size: 14px; }',
+  '.of-clock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13.5px; } .of-clock input { width: 54px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; background: var(--surface); text-align: right; } .of-sep { width: 1px; height: 18px; background: var(--line); margin: 0 6px; }',
+  '.of-t td, .of-t th { text-align: left; vertical-align: top; } .of-a { white-space: normal; } .of-a .btn { margin: 0 4px 4px 0; }',
+  '.of-h { padding-left: 18px; font-size: 13.5px; color: var(--muted); } .of h4.mt { font-family: var(--display); font-size: 15px; margin: 18px 0 6px; }',
+  '@media (max-width: 720px) { .of-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }'
+].join('\n');
+document.head.appendChild(css);
+})();
+
+</script>
+<script>
 /* ext\ops-view.js */
 // Operations view shown above the decisions list: pipeline and leakage, today's worklist, territory health,
 // before and after, adoption metrics. Logic lives in src/modules/ops.js.
@@ -3833,6 +4115,12 @@ function strip() {
   return '<section class="attn" aria-label="Needs attention"><span><b>' + n + '</b> thing' + (n === 1 ? '' : 's') + ' need a person today</span>' + (bits.length ? '<span class="muted">' + bits.join(' · ') + '</span>' : '') + '<span class="grow"></span><button class="link" data-act="tab" data-v="overview">Open the worklist →</button></section>';
 }
 
+window.DeskExt.assumptions.push(function () {
+  var d = O.DEFAULT_TIME;
+  return [{ area: 'Time saved', name: 'Minutes by hand: screen one application / cross-check one pin / write one follow-up', def: [d.screenMin, d.pinMin, d.followMin].join(' / '), now: [T.screenMin, T.pinMin, T.followMin].join(' / '), where: 'Overview, Before and after', how: 'Time five real applications with the expansion team before the pilot and use the median.' },
+          { area: 'Time saved', name: 'Minutes with the desk: review one decision / send one message', def: [d.reviewMin, d.sendMin].join(' / '), now: [T.reviewMin, T.sendMin].join(' / '), where: 'Overview, Before and after', how: 'Time the same five applications in the tool during the pilot.' },
+          { area: 'Time saved', name: 'Hours of screening per day (to show days saved)', def: String(d.teamHours), now: String(T.teamHours), where: 'Overview, Before and after', how: "Ask the expansion team how many hours a day they really spend on screening." }];
+});
 window.DeskExt.afterSummary.push(strip);
 window.DeskExt.tabs.push({ id: 'overview', label: 'Overview', render: view, badge: function () { return S.run ? todo() : ''; } });
 window.DeskExt.afterRender.push(sync);
@@ -3959,12 +4247,116 @@ document.head.appendChild(css);
 
 </script>
 <script>
+/* ext\opsask.js */
+// Operations questions for Ask the desk: what to do today, slots left, who is next in line, lists by city or language,
+// which territories need applicants, which offers are about to expire. Everything is read from the live decisions.
+(function () {
+'use strict';
+var D = window.__desk, S = D.S, E = D.E, esc = D.esc, pill = D.pill, O = window.DeskOps, PN = window.DeskPlanner, OF = window.DeskOffers;
+var OUT = { approve: 'Approve', approved: 'Approve', approvals: 'Approve', waitlist: 'Waitlist', waitlisted: 'Waitlist', hold: 'Hold', holds: 'Hold', held: 'Hold', reject: 'Reject', rejected: 'Reject', rejections: 'Reject' };
+var OUT_WORD = { Approve: 'approved', Waitlist: 'waitlisted', Hold: 'on hold', Reject: 'rejected' };
+function link(id) { return '<button class="link" data-act="open-app" data-v="' + esc(id) + '"><b>' + esc(id) + '</b></button>'; }
+function live() { return S.apps.filter(function (a) { return !a.withdrawn && S.run.res[a.id]; }); }
+function cityIn(low) {
+  var words = low.replace(/[^a-z\s-]/g, ' ').split(/\s+/), hit = null;
+  words.forEach(function (w) { if (!hit && w.length > 3) { var c = E.canonCity(w); if (E.CITIES[c]) hit = c; } });
+  return hit;
+}
+function terIn(text) { var m = text.match(/\bter[-\s_]?0*(\d{1,3})\b/i); if (!m) return null; var n = +m[1]; var t = S.ters.filter(function (x) { return parseInt(x.id.replace(/\D/g, ''), 10) === n; })[0]; return t || null; }
+function langIn(low) { var m = low.match(/\b(kannada|hindi|english)\b/); return m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : null; }
+function outIn(low) { var m = low.match(/\b(approved|approvals|approve|waitlisted|waitlist|holds|hold|held|rejected|rejections|reject)\b/); return m ? OUT[m[1]] : null; }
+function rowsOf(list) {
+  return '<ul class="diff">' + list.map(function (a) { var r = S.run.res[a.id]; return '<li>' + link(a.id) + ' ' + esc(a.name) + ' ' + pill(r.outcome, true) + ' <span class="muted">' + esc(a.city) + ' ' + esc(a.pin) + '</span></li>'; }).join('') + '</ul>';
+}
+function slotsOf(t) { var f = Math.min(t.slots, S.run.approvedByTer[t.id] || 0); return { filled: f, open: t.slots - f }; }
+function terLine(t) { var s = slotsOf(t); return '<li><b>' + esc(t.id) + '</b> ' + esc(t.city) + ' (' + esc(t.priority.toLowerCase()) + '): ' + s.filled + ' of ' + t.slots + ' filled, <b>' + s.open + ' open</b></li>'; }
+
+window.DeskExt.answerers.push(function (text) {
+  if (!S.run) return null;
+  var low = text.toLowerCase().trim(), city = cityIn(low), t = terIn(text), lang = langIn(low), out = outIn(low);
+
+  // what should we do today
+  if (/\b(what should (we|i) do|what needs (attention|doing|a person)|where (do|should) (we|i) start|who should (we|i) (call|contact|chase|message) first|priorit(y|ies)|to.?do|today)\b/.test(low) && O && !/\bAPP-\d/i.test(text) && !city && !t) {
+    var groups = O.worklist(S), items = [];
+    groups.forEach(function (g) { g.items.forEach(function (i) { items.push({ g: g, i: i }); }); });
+    items.sort(function (x, y) { return ({ chase: 0, contest: 1, alt: 2, verify: 3 }[x.g.key]) - ({ chase: 0, contest: 1, alt: 2, verify: 3 }[y.g.key]); });
+    var top = items.slice(0, 6);
+    if (!top.length) return '<p>Nothing needs a person right now.</p>';
+    return '<p>' + items.length + ' things need a person today. Start with these, highest-priority territories first:</p><ul class="diff">' + top.map(function (x) { return '<li>' + link(x.i.id) + ' ' + esc(x.i.title.charAt(0).toUpperCase() + x.i.title.slice(1)) + '</li>'; }).join('') + '</ul><button class="link" data-act="tab" data-v="overview">Open the full worklist</button>';
+  }
+
+  // slots left, by territory or city, or overall
+  if (/\b(slots?|vacanc\w+|capacity|room)\b/.test(low) && /\b(left|open|remain\w*|available|free|how many|filled|full)\b/.test(low) && !/\bAPP-\d/i.test(text)) {
+    var ters = t ? [t] : city ? S.ters.filter(function (x) { return x.city === city; }) : S.ters.filter(function (x) { return slotsOf(x).open > 0; });
+    if (!ters.length) return '<p>' + (city ? 'There are no territories in ' + esc(city) + ' in this file.' : 'Every slot is filled.') + '</p>';
+    var tot = 0; ters.forEach(function (x) { tot += slotsOf(x).open; });
+    return '<p>' + (t || city ? '' : tot + ' slots are still open in ' + ters.length + ' territor' + (ters.length === 1 ? 'y' : 'ies') + ':') + '</p><ul class="diff">' + ters.map(terLine).join('') + '</ul>';
+  }
+
+  // who is next in line for a territory or pin
+  if (/\b(next in line|next up|waiting for|waitlist for|queue|who(.s| is) waiting|who gets (it|the slot|the pin) next)\b/.test(low) || (/\b(waitlist|waitlisted)\b/.test(low) && (t || /\b\d{6}\b/.test(low)))) {
+    var pin = (low.match(/\b(\d{6})\b/) || [])[1];
+    if (t || pin) {
+      var w = live().filter(function (a) { var r = S.run.res[a.id]; return r.outcome === 'Waitlist' && ((t && r.ter && r.ter.id === t.id) || (pin && a.pin === pin)); }).sort(function (p, q) { return S.run.res[q.id].score - S.run.res[p.id].score; });
+      var label = t ? t.id : 'pin ' + pin;
+      if (!w.length) return '<p>Nobody is waitlisted for ' + esc(label) + '.</p>';
+      return '<p>Waitlist for ' + esc(label) + ', in order of who would be promoted first:</p><ol class="rd">' + w.map(function (a) { var r = S.run.res[a.id]; return '<li>' + link(a.id) + ' ' + esc(a.name) + ' (score ' + r.score + ')</li>'; }).join('') + '</ol>';
+    }
+  }
+
+  // which territories need more applicants
+  if (/\b(which|what)\b.*\b(territor\w+|areas?|cities)\b.*\b(need|short|behind|empty|unfilled|more applicants|recruit)/.test(low) && PN) {
+    var plan = PN.plan(S, PN.DEFAULTS), short = plan.rows.filter(function (r) { return r.gap > 0; });
+    if (!short.length) return '<p>Every territory has enough eligible applicants for its slots.</p>';
+    return '<p>' + short.length + ' territor' + (short.length === 1 ? 'y needs' : 'ies need') + ' more applicants (placement rate ' + Math.round(plan.rate * 100) + '%, from ' + plan.received + ' applications):</p><ul class="diff">' + short.map(function (r) { return '<li><b>' + esc(r.id) + '</b> ' + esc(r.city) + ' (' + esc(r.priority.toLowerCase()) + '): about ' + (r.needed == null ? '?' : r.needed) + ' more for ' + r.open + ' open slot' + (r.open === 1 ? '' : 's') + '</li>'; }).join('') + '</ul><button class="link" data-act="tab" data-v="pipeplan">Open the pipeline plan</button>';
+  }
+
+  // offers
+  if (/\boffers?\b/.test(low) && /\b(expir\w+|deadline|due|lapse\w*|pending|unsigned|open|signed)\b/.test(low) && OF) {
+    var now = new Date(Date.now() + (S.clockDays || 0) * 86400000), rows = OF.list(S, now, OF.DEFAULTS);
+    var pend = rows.filter(function (o) { return o.status !== 'Signed'; });
+    if (!rows.length) return '<p>There are no offers yet because nobody is approved.</p>';
+    return '<p>' + pend.length + ' of ' + rows.length + ' offers are not signed yet:</p><ul class="diff">' + pend.slice(0, 8).map(function (o) { return '<li>' + link(o.id) + ' ' + esc(o.name) + ': ' + (o.status === 'Expired' ? '<b>deadline passed</b>' : o.daysLeft + ' day' + (o.daysLeft === 1 ? '' : 's') + ' left') + (o.next.length ? '; if it lapses, ' + esc(o.next.map(function (p) { return p.id; }).join(', ')) + ' is promoted' : '') + '</li>'; }).join('') + '</ul><button class="link" data-act="tab" data-v="offers">Open offers</button>';
+  }
+
+  // lists and counts by city, language or outcome
+  var asks = /\b(list|show|which|who|how many|count|all)\b/.test(low) || /\b(applicants?|applications?|partners?)\b/.test(low);
+  if (asks && !/\bAPP-\d/i.test(text) && (city || lang) && !t) {
+    var l = live().filter(function (a) { return (!city || a.city === city) && (!lang || (a.lang || 'English') === lang) && (!out || S.run.res[a.id].outcome === out); });
+    var what = (out ? OUT_WORD[out] + ' ' : '') + 'applicants' + (city ? ' in ' + city : '') + (lang ? ' who prefer ' + lang : '');
+    if (/\bhow many\b|\bcount\b/.test(low)) return '<p><b>' + l.length + '</b> ' + esc(what) + '.</p>' + (l.length && l.length <= 12 ? rowsOf(l) : '');
+    if (!l.length) return '<p>No ' + esc(what) + '.</p>';
+    return '<p>' + l.length + ' ' + esc(what) + ':</p>' + rowsOf(l);
+  }
+  // a territory by itself
+  if (t && /\b(competing|competition|rivals?|applicants|who)\b/.test(low) && !/\bAPP-\d/i.test(text)) {
+    var inT = live().filter(function (a) { return t.pins.indexOf(a.pin) >= 0; });
+    return '<p><b>' + esc(t.id) + '</b> ' + esc(t.city) + ' has ' + inT.length + ' applicant' + (inT.length === 1 ? '' : 's') + ' for ' + t.slots + ' slot' + (t.slots === 1 ? '' : 's') + ':</p>' + (inT.length ? rowsOf(inT) : '');
+  }
+  return null;
+});
+})();
+
+</script>
+<script>
 /* ext\payback.js */
 // Payback band on each record: best, base and worst months to recover the investment. Illustrative, not a forecast.
 (function () {
 'use strict';
 var D = window.__desk, S = D.S, esc = D.esc, PB = window.DeskPayback;
 var cfg = JSON.parse(JSON.stringify(PB.DEFAULTS));
+var pcts = PB.STRESS_PCTS.slice();   // the sales levels of the bad-six-months test, as a share of base sales
+function lakh(x) { return (Math.round(x * 10) / 10).toString(); }
+function stressHtml(a, r, b) {
+  var floor = r.tier ? S.cfg.floors[r.tier] : null, spare = Math.max(0, (a.invest || 0) - (floor || 0));
+  var t = PB.stress(b.invest, spare, cfg, pcts);
+  var rows = t.rows.map(function (x) {
+    return '<tr><td>' + x.pct + '% of base</td><td>Rs ' + lakh(x.sales) + ' lakh</td><td class="' + (x.monthly < 0 ? 'neg' : '') + '">' + (x.monthly >= 0 ? '+' : '') + lakh(x.monthly) + '</td><td class="' + (x.six < 0 ? 'neg' : '') + '">' + (x.six >= 0 ? '+' : '') + lakh(x.six) + '</td><td>' +
+      (x.monthly < 0 ? (x.runway > 0 ? 'Spare capital lasts ' + lakh(x.runway) + ' months' : '<b class="neg">No spare capital to cover the loss</b>') : 'Covers its costs; payback in ' + x.payback.toFixed(0) + ' months') + '</td></tr>';
+  }).join('');
+  return '<h4>Bad six months <span class="pb-tag">Illustrative, not a forecast</span></h4><table class="cmp pb-t"><thead><tr><th>Sales run at</th><th>Monthly sales</th><th>Monthly result</th><th>Six months</th><th>What it means</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<p class="muted sm">Results in Rs lakh after gross margin and running costs. The store covers its running costs down to Rs ' + lakh(t.breakEvenSales) + ' lakh a month, about ' + t.breakEvenPct + '% of base sales. Spare capital is the applicant\'s stated investment minus the Rs ' + (floor || 0) + ' lakh store cost: Rs ' + lakh(spare) + ' lakh. Check against the first six months of sales at existing stores.</p>';
+}
 function mo(x) { return x == null ? 'never' : x.toFixed(0) + ' months'; }
 function inp(k, val, label, unit) { return '<label class="pb-in"><span>' + label + '</span><input type="number" step="0.1" min="0" value="' + val + '" data-pb="' + k + '"><small>' + unit + '</small></label>'; }
 
@@ -3975,16 +4367,30 @@ window.DeskExt.afterDetail.push({ group: 'plan', fn: function (a, r) {
   return '<h4>Payback band <span class="pb-tag">Illustrative scenario, not a forecast</span></h4>' +
     '<div class="pb"><div><small>Best</small><b>' + mo(b.best) + '</b></div><div class="base"><small>Base</small><b>' + mo(b.base) + '</b></div><div><small>Worst</small><b>' + mo(b.worst) + '</b></div></div>' +
     '<p class="muted sm">To recover Rs ' + b.invest + ' lakh (' + (cfg.invest === 'applicant' ? 'the applicant\'s stated investment' : 'the minimum store investment for a ' + esc(r.tier) + ' city') + ') at Rs ' + cfg.sales.best + ' / ' + cfg.sales.base + ' / ' + cfg.sales.worst + ' lakh monthly sales, ' + Math.round(cfg.margin * 100) + '% gross margin and Rs ' + cfg.running + ' lakh monthly running costs.</p>' +
+    stressHtml(a, r, b) +
     '<details class="pb-a"><summary>Change the payback inputs (apply to every applicant)</summary>' +
       '<p class="muted sm">There is no brand data for these. The placeholders were set so that a Rs 25 to 35 lakh store pays back in 12 to 18 months in the base case, the range publicly quoted for a Lenskart-type store (an unofficial, third-party figure). With the current inputs that is ' + mo(cal.low) + ' to ' + mo(cal.high) + '.</p>' +
       '<div class="pb-grid">' + inp('sales.best', cfg.sales.best, 'Monthly sales, best', 'Rs lakh') + inp('sales.base', cfg.sales.base, 'Monthly sales, base', 'Rs lakh') + inp('sales.worst', cfg.sales.worst, 'Monthly sales, worst', 'Rs lakh') +
       inp('margin', Math.round(cfg.margin * 100), 'Gross margin', '%') + inp('running', cfg.running, 'Monthly running costs', 'Rs lakh') +
+      inp('stress.0', pcts[0], 'Bad-month sales level 1', '% of base sales') + inp('stress.1', pcts[1], 'Bad-month sales level 2', '% of base sales') + inp('stress.2', pcts[2], 'Bad-month sales level 3', '% of base sales') +
       '<label class="pb-in"><span>Investment to recover</span><select data-pb="invest"><option value="floor"' + (cfg.invest === 'floor' ? ' selected' : '') + '>Store cost for the tier</option><option value="applicant"' + (cfg.invest === 'applicant' ? ' selected' : '') + '>Applicant\'s stated figure</option></select></label></div></details>';
 } });
+
+window.DeskExt.assumptions.push(function () {
+  var d = PB.DEFAULTS, same = function (a, b) { return String(a) === String(b); };
+  return [
+    { area: 'Payback and bad six months', name: 'Monthly sales: best / base / worst (Rs lakh)', def: [d.sales.best, d.sales.base, d.sales.worst].join(' / '), now: [cfg.sales.best, cfg.sales.base, cfg.sales.worst].join(' / '), where: 'A record, Plan tab', how: "Set so a Rs 25 to 35 lakh store pays back in 12 to 18 months (public, unofficial quote). Replace with the brand's average monthly sales by tier from existing stores." },
+    { area: 'Payback and bad six months', name: 'Gross margin', def: Math.round(d.margin * 100) + '%', now: Math.round(cfg.margin * 100) + '%', where: 'A record, Plan tab', how: "Finance's gross margin on a typical basket at existing stores." },
+    { area: 'Payback and bad six months', name: 'Monthly running costs (rent, staff, utilities)', def: 'Rs ' + d.running + ' lakh', now: 'Rs ' + cfg.running + ' lakh', where: 'A record, Plan tab', how: 'Average monthly cost of an existing store, by tier, from the franchise P&L.' },
+    { area: 'Payback and bad six months', name: 'Bad-month sales levels', def: PB.STRESS_PCTS.join('%, ') + '% of base', now: pcts.join('%, ') + '% of base', where: 'A record, Plan tab', how: 'Compare with the lowest first-six-month sales at existing stores as a share of their steady-state sales.' },
+    { area: 'Payback and bad six months', name: 'Investment to recover', def: 'Store cost for the tier', now: cfg.invest === 'floor' ? 'Store cost for the tier' : "Applicant's stated figure", where: 'A record, Plan tab', how: "Actual fit-out and opening cost of the last stores, by tier." }
+  ].map(function (r) { r.changed = !same(r.def, r.now); return r; });
+});
 
 document.addEventListener('change', function (e) {
   var k = e.target.getAttribute && e.target.getAttribute('data-pb'); if (!k) return;
   if (k === 'invest') cfg.invest = e.target.value;
+  else if (k.indexOf('stress.') === 0) { var sv = parseFloat(e.target.value); if (isNaN(sv) || sv <= 0 || sv > 200) return; pcts[+k.slice(7)] = sv; }
   else {
     var v = parseFloat(e.target.value); if (isNaN(v) || v < 0) return;
     if (k === 'margin') v = Math.min(100, v) / 100;
@@ -3995,7 +4401,7 @@ document.addEventListener('change', function (e) {
 });
 
 var css = document.createElement('style');
-css.textContent = '.pb { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 4px 0 6px; } .pb > div { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--surface2); }' +
+css.textContent = '.pb-t td, .pb-t th { text-align: left; } .pb-t td.neg, b.neg { color: var(--no); }' + '.pb { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 4px 0 6px; } .pb > div { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--surface2); }' +
   ' .pb > div.base { border-color: var(--accent); } .pb small { display: block; font-size: 12px; color: var(--muted); } .pb b { font-family: var(--display); font-size: 17px; }' +
   ' .pb-tag { font-family: var(--body); font-size: 11.5px; font-weight: 600; color: var(--hold); border: 1px solid var(--hold); border-radius: 4px; padding: 0 6px; margin-left: 6px; vertical-align: 2px; }' +
   ' .pb-a summary { cursor: pointer; font-size: 13px; color: var(--accent); } .pb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; margin-top: 6px; }' +
@@ -4010,8 +4416,10 @@ document.head.appendChild(css);
 // Logic in src/modules/planner.js; outreach pins ranked by the Site finder's crowd estimate when available.
 (function () {
 'use strict';
-var D = window.__desk, S = D.S, esc = D.esc, P = window.DeskPlanner, Geo = window.DeskGeo;
+var D = window.__desk, S = D.S, esc = D.esc, P = window.DeskPlanner, Geo = window.DeskGeo, LV = window.DeskLevers;
 var cfg = JSON.parse(JSON.stringify(P.DEFAULTS));
+var owners = {}; Object.keys(LV.LEVERS).forEach(function (k) { owners[k] = LV.LEVERS[k].owner; });
+var money = { cost: '', value: '' };   // the team's own numbers; blank until typed
 function pct(x) { return Math.round(100 * x) + '%'; }
 function crowdAt(p) { return Geo && Geo.data ? Geo.pinCrowd(p, Geo.cfg) : null; }
 function inp(k, val, unit, label) { return '<label class="pp-in"><span>' + label + '</span><input type="number" min="0" step="1" value="' + val + '" data-pp="' + k + '"><small>' + unit + '</small></label>'; }
@@ -4036,18 +4444,42 @@ function tabHtml() {
     return '<li><b>' + esc(r.id) + ' ' + esc(r.city) + '</b> (' + r.priority.toLowerCase() + ' priority): ' + (r.fixable.length ? 'first chase ' + r.fixable.map(esc).join(', ') + ' (a fixable hold that would take the slot); then ' : '') +
       'recruit about ' + (r.needed == null ? 'an unknown number of' : r.needed) + ' applicant' + (r.needed === 1 ? '' : 's') + (r.pins.length ? ', starting in pin' + (r.pins.length > 1 ? 's ' : ' ') + r.pins.slice(0, 3).map(function (x) { return x.pin; }).join(', ') : '') + '.</li>';
   }).join('');
+  var levCards = p.rows.map(function (r) { return { r: r, ls: LV.levers(S, r, owners) }; }).filter(function (x) { return x.ls.length; }).map(function (x) {
+    var be = LV.breakEven(money.cost, money.value);
+    return '<div class="lv-c"><div class="lv-h"><b>' + esc(x.r.id) + ' ' + esc(x.r.city) + '</b> <span class="prio p-' + x.r.priority.toLowerCase().slice(0, 3) + '">' + x.r.priority + '</span> <span class="muted sm">' + (x.r.open > 0 ? x.r.open + ' open slot' + (x.r.open === 1 ? '' : 's') : 'full, with a waitlist') + '</span></div><ul>' +
+      x.ls.map(function (l) { return '<li><b>' + esc(l.name) + '</b> <span class="lv-o">Owner: ' + esc(l.owner) + '</span><div class="muted sm">' + esc(l.why) + '</div></li>'; }).join('') + '</ul>' +
+      (be != null && x.r.open > 0 ? '<p class="sm lv-b">With your numbers, an incentive of Rs ' + esc(money.cost) + ' lakh breaks even after ' + (Math.round(be * 10) / 10) + ' month' + (be === 1 ? '' : 's') + ' of a store earning the brand Rs ' + esc(money.value) + ' lakh a month.</p>' : '') + '</div>';
+  }).join('');
   return '<div class="pp"><p class="muted sm">How many more applicants each territory needs to fill its open slots, using only this file. Highest-priority territories first.</p>' + head +
     '<div class="tscroll"><table class="cmp pp-t"><thead><tr><th>Territory</th><th>Open slots</th><th>Applied</th><th>Rate used</th><th>Fixable holds</th><th>New applicants needed</th><th>Per week</th><th>Where to recruit (crowd)</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    (levCards ? '<h4 class="mt">Territory levers</h4><p class="muted sm">What to do about each territory that is not filling, and who owns it. No money figures unless you type your own in the assumptions below.</p><div class="lv">' + levCards + '</div>' : '') +
     (targets ? '<h4 class="mt">Outreach targets</h4><ul class="pp-list">' + targets + '</ul>' : '<p>Every territory is full.</p>') +
     '<details class="sf-box"><summary>Assumptions (editable)</summary><div class="pp-grid">' +
       inp('ownRateFrom', cfg.ownRateFrom, 'applications', 'Use a territory\'s own rate from') +
       inp('holdClear', Math.round(cfg.holdClear * 100), '% of fixable holds; default 0 because the file has no history', 'Holds expected to clear') +
       inp('weeks', cfg.weeks, 'weeks', 'Recruit over') + '</div>' +
+      '<h4 class="mt">Lever owners</h4><div class="pp-grid">' + Object.keys(LV.LEVERS).map(function (k) { return '<label class="pp-in pp-tx"><span>' + esc(LV.LEVERS[k].name) + '</span><input type="text" value="' + esc(owners[k]) + '" data-lv="' + k + '"></label>'; }).join('') + '</div>' +
+      '<h4 class="mt">Incentive break-even (optional, your own numbers)</h4><div class="pp-grid">' +
+        '<label class="pp-in"><span>Incentive cost per new partner</span><input type="number" min="0" step="any" value="' + esc(money.cost) + '" data-lvm="cost" placeholder="blank"><small>Rs lakh. No default: the file has no cost data.</small></label>' +
+        '<label class="pp-in"><span>Value of one store to the brand per month</span><input type="number" min="0" step="any" value="' + esc(money.value) + '" data-lvm="value" placeholder="blank"><small>Rs lakh a month (fees, royalty, margin). No default.</small></label></div>' +
       '<p class="muted sm">Applicants needed = open slots (minus holds expected to clear) divided by the placement rate, rounded up. The range uses the 90% range of the rate. Crowd next to each pin is the Site finder\'s estimate at the pin centre (0 to 100 within the city).</p></details></div>';
 }
+window.DeskExt.assumptions.push(function () {
+  var d = P.DEFAULTS;
+  return [
+    { area: 'Pipeline plan', name: "Use a territory's own placement rate from", def: d.ownRateFrom + ' applications', now: cfg.ownRateFrom + ' applications', where: 'Pipeline plan', how: "Compare each territory's rate with the brand's approval-to-placement history; below this sample size the overall rate is used." },
+    { area: 'Pipeline plan', name: 'Share of fixable holds expected to clear', def: Math.round(d.holdClear * 100) + '%', now: Math.round(cfg.holdClear * 100) + '%', where: 'Pipeline plan', how: 'Share of held applicants in past files who fixed the gap within 30 days.' },
+    { area: 'Pipeline plan', name: 'Recruiting period for a weekly target', def: d.weeks + ' weeks', now: cfg.weeks + ' weeks', where: 'Pipeline plan', how: "The brand's planned recruiting window for the territory." },
+    { area: 'Territory levers', name: 'Lever owners', def: 'Named roles', now: Object.keys(owners).map(function (k) { return owners[k]; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', '), where: 'Pipeline plan', changed: Object.keys(owners).some(function (k) { return owners[k] !== LV.LEVERS[k].owner; }), how: "Replace with the brand's real roles; each lever needs one named person." },
+    { area: 'Territory levers', name: 'Incentive cost and value of a store to the brand', def: 'Blank (no money figures)', now: money.cost && money.value ? 'Rs ' + money.cost + ' lakh cost, Rs ' + money.value + ' lakh a month' : 'Blank', where: 'Pipeline plan', changed: !!(money.cost || money.value), how: 'Finance supplies the cost of an incentive and the monthly fees, royalty and margin of a store; the page shows only the break-even.' }
+  ];
+});
 window.DeskExt.tabs.push({ id: 'pipeplan', label: 'Pipeline plan', render: tabHtml });
 
+function redraw() { var b = document.getElementById('tabbody'); if (b) { b.innerHTML = tabHtml(); var d = b.querySelector('.sf-box'); if (d) d.open = true; } }
 document.addEventListener('change', function (e) {
+  var lv = e.target.getAttribute && e.target.getAttribute('data-lv'); if (lv) { owners[lv] = e.target.value.trim() || LV.LEVERS[lv].owner; redraw(); return; }
+  var lm = e.target.getAttribute && e.target.getAttribute('data-lvm'); if (lm) { money[lm] = e.target.value; redraw(); return; }
   var k = e.target.getAttribute && e.target.getAttribute('data-pp'); if (!k) return;
   var v = parseFloat(e.target.value); if (isNaN(v) || v < 0) return;
   cfg[k] = k === 'holdClear' ? Math.min(100, v) / 100 : v;
@@ -4061,6 +4493,7 @@ css.textContent = [
   '.pp-tiles > div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; }',
   '.pp-tiles small { font-size: 12px; color: var(--muted); } .pp-tiles b { font-family: var(--display); font-size: 26px; font-weight: 800; line-height: 1.15; } .pp-tiles span { font-size: 12.5px; color: var(--muted); }',
   '.pp-warn { font-size: 13.5px; border-left: 3px solid var(--hold); background: var(--surface); padding: 6px 10px; border-radius: 4px; }',
+  '.lv { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; } .lv-c { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; } .lv-c ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; } .lv-o { font-size: 12px; color: var(--muted); margin-left: 6px; } .lv-b { margin: 8px 0 0; padding-top: 8px; border-top: 1px dashed var(--line); } .pp-tx { grid-template-columns: 1fr; } .pp-tx input { width: 100%; text-align: left; }',
   '.pp-t td, .pp-t th { text-align: left; vertical-align: top; } .pp-t tr.pp-done td { color: var(--muted); }',
   '.prio.p-med { color: var(--hold); } .prio.p-hig { color: var(--no); }',
   '.pp-list { padding-left: 18px; font-size: 14px; } .pp-list li { margin-bottom: 5px; }',
@@ -4068,6 +4501,94 @@ css.textContent = [
   '.pp-in { display: grid; grid-template-columns: 1fr 64px; gap: 0 8px; align-items: center; font-size: 13px; } .pp-in input { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; background: var(--surface); text-align: right; } .pp-in small { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; }',
   '@media (max-width: 720px) { .pp-tiles, .pp-grid { grid-template-columns: minmax(0, 1fr); } }'
 ].join('\n');
+document.head.appendChild(css);
+})();
+
+</script>
+<script>
+/* ext\register.js */
+// Assumptions register: every number the tool depends on, with its default, its current value, where to change it,
+// and the real-world check that would confirm it. This is the slide 4 table, kept in step with the live app.
+// Other pages add their own rows through DeskExt.assumptions; the core rules and the Site finder are listed here.
+(function () {
+'use strict';
+var D = window.__desk, S = D.S, E = D.E, esc = D.esc, Geo = window.DeskGeo, GL = window.DeskGoLive, WI = window.DeskWhatIf;
+var AREA_ORDER = ['Decision rules', 'Scoring', 'Timing and onboarding', 'Offers', 'Pipeline plan', 'Territory levers', 'Site finder', 'Catchment overlap', 'Payback and bad six months', 'Confidence and fragility', 'Time saved'];
+
+function row(area, name, def, now, where, how) { return { area: area, name: name, def: String(def), now: String(now), where: where, how: how }; }
+var j = function (a) { return a.join(' / '); };
+
+function coreRows() {
+  var d = E.DEFAULT_CFG, c = S.cfg, w = d.weights, cw = c.weights, out = [];
+  out.push(row('Decision rules', 'Minimum investment by city tier (Tier 1 / 2 / 3, Rs lakh)', j([d.floors['Tier 1'], d.floors['Tier 2'], d.floors['Tier 3']]), j([c.floors['Tier 1'], c.floors['Tier 2'], c.floors['Tier 3']]), 'Assumptions page',
+    "Actual fit-out and opening cost of the brand's last stores in each tier. The public quote of Rs 20 to 35 lakh is third-party and unofficial."));
+  out.push(row('Decision rules', 'Reject below this share of the minimum investment', Math.round(d.rejectRatio * 100) + '%', Math.round(c.rejectRatio * 100) + '%', 'Assumptions page', 'Share of held applicants in past files who closed a funding gap within 30 days; below this level, check whether anyone ever did.'));
+  out.push(row('Decision rules', 'Minimum space (sq ft)', d.minSpace, c.minSpace, 'Assumptions page', 'Sales per sq ft by size band across existing stores. A public listing quotes 250 to 500 sq ft.'));
+  out.push(row('Decision rules', 'Ideal space range (sq ft)', d.idealMin + ' to ' + d.idealMax, c.idealMin + ' to ' + c.idealMax, 'Assumptions page', 'Same check: which size band performs best at existing stores.'));
+  out.push(row('Decision rules', 'Upper floors are held; ground floor and mall units pass', 'Fixed rule', 'Fixed rule', 'Engine rule', 'Footfall and sales of existing upper-floor versus ground-floor stores.'));
+  out.push(row('Decision rules', 'One store per pin code', 'Fixed rule', 'Fixed rule', 'Engine rule', 'Stated in the brief; confirm with the brand whether very large pin codes can ever take two stores.'));
+  out.push(row('Timing and onboarding', 'Earliest realistic opening (weeks), and extra if no space yet', d.earliestWeeks + ' + ' + d.noSpaceExtraWeeks, c.earliestWeeks + ' + ' + c.noSpaceExtraWeeks, 'Assumptions page', 'Time each step (agreement, fit-out, training, opening) for the last 5 stores and use the 80th percentile.'));
+  out.push(row('Timing and onboarding', 'First-time retailer if under (years of experience)', d.firstTimerYears, c.firstTimerYears, 'Assumptions page', 'Compare the first 90 days of sales of first-time and experienced retailers at existing stores; set the cut-off where they separate.'));
+  if (GL) out.push(row('Timing and onboarding', 'Go-live gates, days before opening (licences, GST, fit-out, training, stock, signage, POS)', GL.GATES.map(function (g) { return g.before; }).join(' / '), GL.GATES.map(function (g) { return g.before; }).join(' / '), 'Source code (golive.js)', 'Actual lead times of each gate at the last stores; move the due dates to match.'));
+  out.push(row('Scoring', 'Spacing risk: high within, medium within (pin numbers apart)', d.cannibNear + ' / ' + d.cannibMid, c.cannibNear + ' / ' + c.cannibMid, 'Assumptions page', 'Replace pin-number distance with real distance, then check how much sales fell at the nearest store when a new one opened within 2 km.'));
+  out.push(row('Scoring', 'Score weights (capital / experience / space / timeline / spacing / data)', j([w.capital, w.experience, w.space, w.timeline, w.cannibal, w.data]), j([cw.capital, cw.experience, cw.space, cw.timeline, cw.cannibal, cw.data]), 'Assumptions page', 'Back-test: do past applicants who scored higher run better stores (12-month sales)? Re-weight until the ranking matches.'));
+  if (WI) {
+    out.push(row('Confidence and fragility', 'High / medium confidence cut-offs (points clear of the next rival)', WI.CONF.high + ' / ' + WI.CONF.medium, WI.CONF.high + ' / ' + WI.CONF.medium, 'Source code (whatif.js)', 'Review the low-confidence decisions with the expansion head for a month; widen or narrow the cut-offs to match where people actually disagreed.'));
+    out.push(row('Confidence and fragility', 'A decision is fragile if it flips when a threshold moves by', Math.round(WI.NUDGE * 100) + '%', Math.round(WI.NUDGE * 100) + '%', 'Source code (whatif.js)', "Set to the team's real uncertainty about each threshold (for example the spread of fit-out costs across the last stores)."));
+  }
+  if (Geo && Geo.data) {
+    var g = Geo.DEFAULTS, k = Geo.cfg;
+    out.push(row('Site finder', 'Crowd blend: share from residents (rest is daytime activity)', Math.round(g.residentShare * 100) + '%', Math.round(k.residentShare * 100) + '%', 'Site finder, Assumptions', 'Back-test against sales by hexagon at existing stores once store addresses are available.'));
+    out.push(row('Site finder', 'Weight of the 6 touching and the next 12 hexagons', g.ring1 + ' / ' + g.ring2, k.ring1 + ' / ' + k.ring2, 'Site finder, Assumptions', "Customer home postcodes from billing: how far from the store do customers actually come?"));
+    out.push(row('Site finder', 'Activity points per place (market, mall, rail and so on)', Object.keys(g.act).map(function (x) { return g.act[x]; }).join(' / '), Object.keys(k.act).map(function (x) { return k.act[x]; }).join(' / '), 'Site finder, Assumptions', 'Walk-in counts at existing stores near each kind of place.'));
+    out.push(row('Catchment overlap', 'Store catchment radius by tier (Tier 1 / 2 / 3, km)', j([g.radius['Tier 1'], g.radius['Tier 2'], g.radius['Tier 3']]), j([k.radius['Tier 1'], k.radius['Tier 2'], k.radius['Tier 3']]), 'Site finder, Assumptions', 'Customer-origin data: the radius that holds 80% of existing stores\' customers. Existing stores overlap each other by under 20% at 2 km.'));
+    out.push(row('Catchment overlap', 'Overlap that flags / suggests a hold', Math.round(g.flagAt * 100) + '% / ' + Math.round(g.vetoAt * 100) + '%', Math.round(k.flagAt * 100) + '% / ' + Math.round(k.vetoAt * 100) + '%', 'Site finder, Assumptions', 'Sales change at the nearest store after a new opening, by overlap level.'));
+    out.push(row('Site finder', 'Overlap penalty (points per 1% of crowd already reached)', g.penalty, k.penalty, 'Site finder, Assumptions', 'Compare recommended sites with where the brand actually opened its best stores.'));
+  }
+  return out;
+}
+
+function allRows() {
+  var rows = coreRows();
+  window.DeskExt.assumptions.forEach(function (fn) { try { fn(S).forEach(function (r) { rows.push(r); }); } catch (e) { /* a page without rows is fine */ } });
+  rows.forEach(function (r) { if (r.changed === undefined) r.changed = r.def !== r.now; });
+  return rows.sort(function (a, b) { var i = AREA_ORDER.indexOf(a.area), k = AREA_ORDER.indexOf(b.area); return (i < 0 ? 99 : i) - (k < 0 ? 99 : k); });
+}
+function markdown(rows) {
+  return '| Assumption | Default | How we would check it |\n|---|---|---|\n' + rows.map(function (r) { return '| ' + [r.name, r.def, r.how].map(function (x) { return String(x).replace(/\|/g, '/'); }).join(' | ') + ' |'; }).join('\n');
+}
+D.assumptionRows = allRows; D.assumptionMarkdown = function () { return markdown(allRows()); };
+
+function tabHtml() {
+  var rows = allRows(), changed = rows.filter(function (r) { return r.changed; }).length, areas = [];
+  rows.forEach(function (r) { if (areas.indexOf(r.area) < 0) areas.push(r.area); });
+  return '<div class="rg"><p class="muted sm">Every number the tool depends on. Each one is shown on screen, can be edited where it says, and has a real-world check that would confirm or replace it.</p>' +
+    '<div class="rg-bar"><span><b>' + rows.length + '</b> assumptions, <b>' + changed + '</b> changed from the default</span><span class="grow"></span><button class="btn sm" data-act="rg-copy">Copy as the slide 4 table</button><button class="btn sm" data-act="rg-dl">Download as a sheet</button></div>' +
+    areas.map(function (a) {
+      return '<h4>' + esc(a) + '</h4><div class="tscroll"><table class="cmp rg-t"><thead><tr><th>Assumption</th><th>Default</th><th>Now</th><th>Change it</th><th>How we would check it</th></tr></thead><tbody>' +
+        rows.filter(function (r) { return r.area === a; }).map(function (r) { return '<tr><td>' + esc(r.name) + '</td><td>' + esc(r.def) + '</td><td class="' + (r.changed ? 'rg-ch' : '') + '">' + esc(r.now) + (r.changed ? ' <small>edited</small>' : '') + '</td><td>' + esc(r.where) + '</td><td>' + esc(r.how) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    }).join('') + '</div>';
+}
+window.DeskExt.tabs.push({ id: 'register', label: 'Assumptions register', render: tabHtml });
+
+window.DeskExt.exportSheets.push(function () {
+  return { name: 'Assumptions register', rows: [['Area', 'Assumption', 'Default', 'Now', 'Change it', 'How we would check it']].concat(allRows().map(function (r) { return [r.area, r.name, r.def, r.now, r.where, r.how]; })) };
+});
+
+document.addEventListener('click', function (e) {
+  var el = e.target.closest && e.target.closest('[data-act="rg-copy"],[data-act="rg-dl"]'); if (!el) return;
+  if (el.getAttribute('data-act') === 'rg-copy') {
+    var label = el.textContent, done = function () { el.textContent = 'Copied'; setTimeout(function () { el.textContent = label; }, 1400); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(markdown(allRows())).then(done, done); else done();
+  } else {
+    var wb = XLSX.utils.book_new(), sh = window.DeskExt.exportSheets[window.DeskExt.exportSheets.length - 1](S);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sh.rows), 'Assumptions register'); XLSX.writeFile(wb, 'assumptions-register.xlsx');
+  }
+});
+
+var css = document.createElement('style');
+css.textContent = '.rg h4 { font-family: var(--display); font-size: 15px; margin: 16px 0 6px; } .rg-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 4px; font-size: 14px; }' +
+  ' .rg-t td, .rg-t th { text-align: left; vertical-align: top; font-size: 13.5px; } .rg-t td:nth-child(2), .rg-t td:nth-child(3) { white-space: nowrap; } .rg-ch { color: var(--hold); font-weight: 600; } .rg-ch small { font-weight: 500; }';
 document.head.appendChild(css);
 })();
 

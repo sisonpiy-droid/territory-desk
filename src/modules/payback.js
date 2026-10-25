@@ -27,7 +27,23 @@ function band(a, tierFloor, cfg) {
 // the calibration claim, checked: base-case months for a Rs 25 and a Rs 35 lakh store
 function calibration(cfg) { cfg = cfg || DEFAULTS; return { low: months(25, cfg.sales.base, cfg), high: months(35, cfg.sales.base, cfg) }; }
 
-var api = { DEFAULTS: DEFAULTS, months: months, band: band, calibration: calibration };
+// The bad-six-months test: what a store does if sales run at a share of the base case for six months.
+// spare = money the applicant has beyond the store cost (their stated investment minus the tier floor, from the file).
+// Illustrative: it uses the same placeholder sales, margin and running costs as the payback band.
+var STRESS_PCTS = [50, 70, 90];
+function stress(invest, spare, cfg, pcts) {
+  cfg = cfg || DEFAULTS; pcts = pcts || STRESS_PCTS; spare = Math.max(0, spare || 0);
+  var breakEven = cfg.running / cfg.margin;   // monthly sales (Rs lakh) at which the store just covers its running costs
+  return {
+    breakEvenSales: breakEven, breakEvenPct: Math.round(100 * breakEven / cfg.sales.base),
+    rows: pcts.map(function (p) {
+      var sales = cfg.sales.base * p / 100, monthly = sales * cfg.margin - cfg.running;
+      return { pct: p, sales: sales, monthly: monthly, six: monthly * 6, payback: monthly > 0 ? invest / monthly : null, runway: monthly < 0 ? (spare > 0 ? spare / -monthly : 0) : null };
+    })
+  };
+}
+
+var api = { DEFAULTS: DEFAULTS, months: months, band: band, calibration: calibration, stress: stress, STRESS_PCTS: STRESS_PCTS };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 root.DeskPayback = api;
 })(typeof window !== 'undefined' ? window : globalThis);

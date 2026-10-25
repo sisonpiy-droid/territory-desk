@@ -79,6 +79,14 @@ Code is on GitHub (sisonpiy-droid/territory-desk). Vercel builds every push (ver
 - Internal-tool look from the design canvas: dark top bar carrying the file name, black primary actions, neutral grey ground, outcome colours only for outcomes. Decisions is a table (ID, applicant, territory, outcome, score, why, next action) under outcome filter tiles and one attention line; the funnel, worklist and territory health live on Overview. Rows switch to a compact layout when the page column is narrower than 820 px (container query); the Ask panel opens by default only at 1500 px and wider.
 - nextAction(r) in ui.js maps a decision to the one short action shown in the table.
 
+## Operations depth (25 Oct 2026)
+- src/modules/offers.js + src/ext/offers.js: every approval is an offer with a deadline (default 7 days, editable); lapsed or declined offers release the pin and promote the next waitlisted applicant automatically, with a fresh deadline and a message in their language. State is derived from decisions (S.offerAt, S.signed), so Undo stays consistent. A simulated clock (+1, +7 days) shows expiry.
+- src/modules/levers.js (+ Pipeline plan page): qualitative territory levers with editable owners; break-even only from numbers the team types.
+- Bad six months: PB.stress in src/modules/payback.js, shown on each record next to the payback band.
+- src/ext/register.js: Assumptions register page (DeskExt.assumptions hook; each page pushes its own rows). docs/slide4-assumptions-register.md is generated from it (node test/make-register-doc.js).
+- src/ext/opsask.js: operations questions for Ask the desk (what to do today, slots left, next in line, lists by city or language, territories needing applicants, offers about to expire).
+- Engine: new holds for contradictions between notes and form (size, investment, upper floor) and for a state other than Karnataka; soft flag for outside funding. test/hardening.js. test/fuzz.js runs hundreds of random workbooks through every module.
+
 ## Motion
 - src/ext/motion.js: GSAP (vendor/gsap.min.js, served from the site, free no-charge licence) animates the first screen, a new file (outcome bar, counters, rows), page changes, records and record sections, Ask the desk and its messages, and decisions that changed. It does nothing if GSAP is missing or prefers-reduced-motion is on; test/motion.js checks both and that nothing is left half-faded.
 
