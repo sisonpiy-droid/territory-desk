@@ -238,6 +238,18 @@ function nextAction(r) {
   return 'Verify KYC';
 }
 
+function guideHtml() {
+  return '<details class="guide"><summary>How to read this table</summary><dl>' +
+    '<dt>Approved</dt><dd>Eligible and has a slot. Check the conditions in the reason before making the offer.</dd>' +
+    '<dt>Waitlisted</dt><dd>Eligible, but the pin or territory is taken by a higher score. Promoted if that applicant drops out.</dd>' +
+    '<dt>On hold</dt><dd>Something is missing or contradicts. The last column says what to ask for.</dd>' +
+    '<dt>Rejected</dt><dd>Does not meet a hard requirement, such as the investment floor.</dd>' +
+    '<dt>Pin</dt><dd>The pin code. Only one store is allowed per pin code.</dd>' +
+    '<dt>Overlap</dt><dd>The share of nearby customers an existing store already reaches. Higher means more cannibalisation risk.</dd>' +
+    '<dt>Confidence</dt><dd>How sure the desk is. Low means a small change in the data could flip the decision.</dd>' +
+    '<dt>Score</dt><dd>Ranks eligible applicants for the same pin or territory. Open a row to see how it is made up.</dd>' +
+    '</dl></details>';
+}
 function decisionsHtml() {
   var q = S.q.trim().toLowerCase(), shown = 0;
   var rows = S.apps.filter(function (a) {
@@ -248,7 +260,7 @@ function decisionsHtml() {
     return true;
   }).map(function (a) { shown++; return rowHtml(a); }).join('');
   var only = S.filterIds ? '<p class="only">Showing ' + esc(S.filterLabel || 'a selection') + ' (' + S.filterIds.length + '). <button class="link" data-act="clear-ids">Show all</button></p>' : '';
-  return only + '<div class="rows"><div class="rows-tools">' + filterBar() + '<input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"><span class="count">Showing ' + shown + ' of ' + S.apps.length + '</span></div>' +
+  return only + guideHtml() + '<div class="rows"><div class="rows-tools">' + filterBar() + '<input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"><span class="count">Showing ' + shown + ' of ' + S.apps.length + '</span></div>' +
     '<div class="row-head" aria-hidden="true"><span>ID</span><span>Applicant</span><span>Territory</span><span title="Decision, then how much of the catchment overlaps other stores, then how sure the desk is">Decision, overlap, confidence</span><span>Score</span><span>Reason</span><span>What to do next</span><span></span></div>' +
     (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
 }

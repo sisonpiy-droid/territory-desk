@@ -139,7 +139,12 @@ body:not(.has-data) #askbtn { display: none; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); display: inline-block; flex: none; }
 .ok { --c: var(--ok); } .wait { --c: var(--wait); } .hold { --c: var(--hold); } .no { --c: var(--no); } .gone { --c: var(--gone); }
 .notices { margin: 0 0 12px; background: color-mix(in srgb, var(--hold) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--hold) 28%, transparent); border-radius: 8px; padding: 6px 12px; font-size: 13px; }
-.notices summary { cursor: pointer; font-weight: 600; } .notices p { margin: 6px 0 0; }
+.notices summary { cursor: pointer; font-weight: 600; }
+.guide { margin: 0 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 13px; }
+.guide summary { cursor: pointer; padding: 6px 12px; font-weight: 600; color: var(--muted); } .guide[open] summary { color: var(--ink); border-bottom: 1px solid var(--line2); }
+.guide dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; padding: 10px 12px; }
+.guide dt { font-weight: 600; } .guide dd { margin: 0; color: var(--muted); }
+@media (max-width: 640px) { .guide dl { grid-template-columns: 1fr; gap: 0; } .guide dd { margin-bottom: 8px; } } .notices p { margin: 6px 0 0; }
 .tabs { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 14px; flex-wrap: wrap; }
 .tab { white-space: nowrap; background: none; border: 0; padding: 10px 14px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab.on { color: var(--ink); border-bottom-color: var(--accent); }
@@ -2588,6 +2593,18 @@ function nextAction(r) {
   return 'Verify KYC';
 }
 
+function guideHtml() {
+  return '<details class="guide"><summary>How to read this table</summary><dl>' +
+    '<dt>Approved</dt><dd>Eligible and has a slot. Check the conditions in the reason before making the offer.</dd>' +
+    '<dt>Waitlisted</dt><dd>Eligible, but the pin or territory is taken by a higher score. Promoted if that applicant drops out.</dd>' +
+    '<dt>On hold</dt><dd>Something is missing or contradicts. The last column says what to ask for.</dd>' +
+    '<dt>Rejected</dt><dd>Does not meet a hard requirement, such as the investment floor.</dd>' +
+    '<dt>Pin</dt><dd>The pin code. Only one store is allowed per pin code.</dd>' +
+    '<dt>Overlap</dt><dd>The share of nearby customers an existing store already reaches. Higher means more cannibalisation risk.</dd>' +
+    '<dt>Confidence</dt><dd>How sure the desk is. Low means a small change in the data could flip the decision.</dd>' +
+    '<dt>Score</dt><dd>Ranks eligible applicants for the same pin or territory. Open a row to see how it is made up.</dd>' +
+    '</dl></details>';
+}
 function decisionsHtml() {
   var q = S.q.trim().toLowerCase(), shown = 0;
   var rows = S.apps.filter(function (a) {
@@ -2598,7 +2615,7 @@ function decisionsHtml() {
     return true;
   }).map(function (a) { shown++; return rowHtml(a); }).join('');
   var only = S.filterIds ? '<p class="only">Showing ' + esc(S.filterLabel || 'a selection') + ' (' + S.filterIds.length + '). <button class="link" data-act="clear-ids">Show all</button></p>' : '';
-  return only + '<div class="rows"><div class="rows-tools">' + filterBar() + '<input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"><span class="count">Showing ' + shown + ' of ' + S.apps.length + '</span></div>' +
+  return only + guideHtml() + '<div class="rows"><div class="rows-tools">' + filterBar() + '<input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"><span class="count">Showing ' + shown + ' of ' + S.apps.length + '</span></div>' +
     '<div class="row-head" aria-hidden="true"><span>ID</span><span>Applicant</span><span>Territory</span><span title="Decision, then how much of the catchment overlaps other stores, then how sure the desk is">Decision, overlap, confidence</span><span>Score</span><span>Reason</span><span>What to do next</span><span></span></div>' +
     (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
 }
