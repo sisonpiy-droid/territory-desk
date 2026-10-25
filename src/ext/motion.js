@@ -26,27 +26,22 @@ function countUp(el, delay) {
 // a new file: bar draws, strip numbers count, rows file in
 var intro = safe(function () {
   var tl = gsap.timeline({ defaults: { ease: EASE } });
-  var nums = $$('.kpi b');
-  nums.forEach(function (n, i) { countUp(n, 0.05 * i); });
-  var cards = $$('.kpi, .attn');
-  if (cards.length) tl.from(cards, { y: 10, autoAlpha: 0, duration: 0.45, stagger: 0.05, clearProps: 'all' }, 0.05);
-  var rows = $$('.rows > .row').slice(0, 14);
-  if (rows.length) tl.from(rows, { y: 14, autoAlpha: 0, duration: 0.45, stagger: 0.035, clearProps: 'all' }, 0.2);
+  var rows = $$('.rows > .row').slice(0, 10);
+  if (rows.length) tl.from(rows, { y: 6, autoAlpha: 0, duration: 0.25, stagger: 0.02, clearProps: 'all' }, 0);
 });
 
 // a different page: the content slides in under the title
 var pageIn = safe(function () {
   var body = $('#tabbody'); if (!body) return;
-  gsap.from(body.children, { y: 12, autoAlpha: 0, duration: 0.4, stagger: 0.05, ease: EASE, clearProps: 'all' });
+  gsap.from(body.children, { autoAlpha: 0, duration: 0.18, ease: EASE, clearProps: 'all' });
   var fills = $$('.fb-fill', body);
-  if (fills.length) gsap.from(fills, { scaleX: 0, transformOrigin: 'left center', duration: 0.7, stagger: 0.08, ease: EASE, clearProps: 'all' });
-  var h = $('.page-h h1'); if (h) gsap.from(h, { x: -10, autoAlpha: 0, duration: 0.35, ease: EASE, clearProps: 'all' });
+  if (fills.length) gsap.from(fills, { scaleX: 0, transformOrigin: 'left center', duration: 0.45, stagger: 0.05, ease: EASE, clearProps: 'all' });
 });
 
 // Ask the desk opens from the right
 var askIn = safe(function () {
   var a = $('#ask'); if (!a) return;
-  gsap.from(a, { x: 36, autoAlpha: 0, duration: 0.4, ease: EASE, clearProps: 'all' });
+  gsap.from(a, { x: 24, autoAlpha: 0, duration: 0.22, ease: EASE, clearProps: 'all' });
 });
 
 // decisions that changed since the last run
@@ -75,13 +70,11 @@ var onAdded = safe(function (el) {
   if (el.classList.contains('empty')) {
     gsap.from(el.children, { y: 18, autoAlpha: 0, duration: 0.6, stagger: 0.08, ease: EASE, clearProps: 'all' });
   } else if (el.classList.contains('detail') && once(el)) {
-    gsap.from(el, { autoAlpha: 0, y: -8, duration: 0.3, ease: EASE, clearProps: 'all' });
+    gsap.from(el, { autoAlpha: 0, y: -6, duration: 0.2, ease: EASE, clearProps: 'all' });
   } else if (el.classList.contains('dbody') && once(el) && el.closest('.detail') && el.closest('.detail').getAttribute('data-seen')) {
-    gsap.from(el, { autoAlpha: 0, y: 6, duration: 0.25, ease: EASE, clearProps: 'all' });
+    gsap.from(el, { autoAlpha: 0, duration: 0.15, ease: EASE, clearProps: 'all' });
   } else if (el.classList.contains('msg') && once(el)) {
-    gsap.from(el, { y: 14, autoAlpha: 0, duration: 0.35, ease: EASE, clearProps: 'all' });
-  } else if (el.classList.contains('notices') || el.classList.contains('only')) {
-    gsap.from(el, { y: -6, autoAlpha: 0, duration: 0.3, ease: EASE, clearProps: 'all' });
+    gsap.from(el, { y: 8, autoAlpha: 0, duration: 0.22, ease: EASE, clearProps: 'all' });
   }
 });
 if (window.MutationObserver) {
@@ -97,9 +90,4 @@ if (window.MutationObserver) {
   }).observe(document.body, { childList: true, subtree: true });
 }
 
-// press feedback on buttons: a small, quick squeeze
-document.addEventListener('pointerdown', safe(function (e) {
-  var b = e.target.closest && e.target.closest('.btn, .kpi, .chip, .nav-i, .dtab');
-  if (b && !b.disabled) gsap.fromTo(b, { scale: 0.97 }, { scale: 1, duration: 0.35, ease: 'back.out(3)', clearProps: 'transform' });
-}), true);
 })();

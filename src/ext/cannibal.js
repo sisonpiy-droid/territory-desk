@@ -40,7 +40,7 @@ window.DeskExt.exportSheets.push(function () {
 });
 
 var css = document.createElement('style');
-css.textContent = '.ovl { font-size: 11.5px; font-weight: 600; white-space: nowrap; } .ovl.flag { color: var(--hold); } .ovl.veto { color: var(--no); }' +
-  ' .ovl-v { border-left: 3px solid var(--no); padding: 4px 10px; background: var(--surface2); border-radius: 4px; font-size: 14px; } .ovl-f { border-left: 3px solid var(--hold); padding: 4px 10px; background: var(--surface2); border-radius: 4px; font-size: 14px; }';
+css.textContent = '.ovl { font-size: 12px; font-weight: 600; white-space: nowrap; } .ovl.flag { color: var(--hold); } .ovl.veto { color: var(--no); }' +
+  ' .ovl-v, .ovl-f { padding: 6px 10px; border-radius: 8px; font-size: 14px; } .ovl-v { background: color-mix(in srgb, var(--no) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--no) 30%, transparent); } .ovl-f { background: color-mix(in srgb, var(--hold) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--hold) 30%, transparent); }';
 document.head.appendChild(css);
 })();

@@ -78,7 +78,7 @@ document.addEventListener('click', function (e) {
 });
 
 var css = document.createElement('style');
-css.textContent = '.rg h4 { font-family: var(--display); font-size: 15px; margin: 16px 0 6px; } .rg-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 4px; font-size: 14px; }' +
-  ' .rg-t td, .rg-t th { text-align: left; vertical-align: top; font-size: 13.5px; } .rg-t td:nth-child(2), .rg-t td:nth-child(3) { white-space: nowrap; } .rg-ch { color: var(--hold); font-weight: 600; } .rg-ch small { font-weight: 500; }';
+css.textContent = '.rg h4 { font-family: var(--display); font-size: 14px; margin: 16px 0 6px; } .rg-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 4px; font-size: 14px; }' +
+  ' .rg-t td, .rg-t th { text-align: left; vertical-align: top; font-size: 13px; } .rg-t td:nth-child(2), .rg-t td:nth-child(3) { white-space: nowrap; } .rg-ch { color: var(--hold); font-weight: 600; } .rg-ch small { font-weight: 500; }';
 document.head.appendChild(css);
 })();

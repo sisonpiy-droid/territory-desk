@@ -120,7 +120,7 @@ function render() {
   root.innerHTML =
     '<div class="shell' + (S.askOpen ? ' ask-open' : '') + '">' +
       '<nav class="side" aria-label="Pages">' + navHtml() + '</nav>' +
-      '<main class="main" id="main"><header class="page-h"><h1>' + esc(pg.label) + '</h1>' + (S.tab === 'decisions' ? '' : '<span class="muted sm">' + fileLine() + '</span>') + '</header>' +
+      '<main class="main" id="main"><header class="page-h"><h1>' + esc(pg.label) + '</h1>' + (S.tab === 'decisions' ? '<span class="meta">' + slotsLine() + '</span>' : '<span class="meta">' + fileLine() + '</span>') + '</header>' +
         noticesHtml() + (S.tab === 'decisions' ? extHtml() : '') + '<div id="tabbody">' + tabBody() + '</div></main>' +
       '<aside class="ask" id="ask" aria-label="Ask the desk">' + askHtml() + '</aside>' +
       '<button class="ask-scrim" data-act="ask-toggle" aria-label="Close Ask the desk" tabindex="-1"></button>' +
@@ -133,12 +133,28 @@ function fileLine() {
   var n = S.apps.filter(function (a) { return !a.withdrawn; }).length;
   return n + ' applications' + (S.label ? ' from ' + esc(S.label) : '');
 }
+var ICON = {
+  overview: '<rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/>',
+  decisions: '<path d="M2.5 4h11M2.5 8h11M2.5 12h7"/>',
+  board: '<path d="M8 2l5 2.9v5.8L8 14l-5-3.3V4.9z"/>',
+  sites: '<path d="M8 14s4.5-3.8 4.5-7.3a4.5 4.5 0 10-9 0C3.5 10.2 8 14 8 14z"/><circle cx="8" cy="6.7" r="1.6"/>',
+  pipeplan: '<path d="M2.5 3h11L9.5 8v5l-3-1.5V8z"/>',
+  scen: '<path d="M3 4.5h6M12 4.5h1M3 11.5h1M7 11.5h6"/><circle cx="10.5" cy="4.5" r="1.5"/><circle cx="5.5" cy="11.5" r="1.5"/>',
+  offers: '<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.2l2 1.3"/>',
+  onboard: '<path d="M3.5 13.5v-11M3.5 3h8l-1.6 2.6L11.5 8h-8"/>',
+  reports: '<path d="M4 2.5h5.5L12.5 5.5v8H4z"/><path d="M9.5 2.5v3h3M6 8.5h4M6 11h4"/>',
+  log: '<path d="M2.5 8a5.5 5.5 0 105.5-5.5A5.6 5.6 0 004 4.2L2.5 5.8"/><path d="M2.5 2.8v3h3M8 5v3.2l2 1.3"/>',
+  fair: '<path d="M8 2l5 1.8v4c0 2.7-2 4.7-5 6.2-3-1.5-5-3.5-5-6.2v-4z"/><path d="M6 8l1.5 1.5L10.2 6.6"/>',
+  assume: '<path d="M2.5 5h4M9.5 5h4M2.5 11h6M11.5 11h2"/><circle cx="8" cy="5" r="1.5"/><circle cx="10" cy="11" r="1.5"/>',
+  register: '<path d="M4 2.5h8v11H4z"/><path d="M6.5 5.5h3M6.5 8h3M6.5 10.5h2"/>'
+};
+function icon(id) { return ICON[id] ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[id] + '</svg>' : ''; }
 function navHtml() {
   var all = pages(), used = {};
   var item = function (id) {
     var p = all[id]; if (!p) return ''; used[id] = 1;
     var badge = id === 'decisions' ? S.apps.filter(function (a) { return !a.withdrawn; }).length : p.badge ? p.badge(S) : '';
-    return '<button class="nav-i' + (S.tab === id ? ' on' : '') + '" data-act="tab" data-v="' + id + '"' + (S.tab === id ? ' aria-current="page"' : '') + '><span>' + esc(p.label) + '</span>' + (badge !== '' && badge != null ? '<b class="nb">' + esc(badge) + '</b>' : '') + '</button>';
+    return '<button class="nav-i' + (S.tab === id ? ' on' : '') + '" data-act="tab" data-v="' + id + '"' + (S.tab === id ? ' aria-current="page"' : '') + '>' + icon(id) + '<span>' + esc(p.label) + '</span>' + (badge !== '' && badge != null ? '<b class="nb">' + esc(badge) + '</b>' : '') + '</button>';
   };
   var html = NAV.map(function (g) { var items = g[1].map(item).join(''); return items ? '<div class="nav-g"><p>' + g[0] + '</p>' + items + '</div>' : ''; }).join('');
   var rest = Object.keys(all).filter(function (id) { return !used[id]; }).map(item).join('');
@@ -172,18 +188,19 @@ function emptyState() {
   '</section>';
 }
 
-function summaryHtml() {
-  var counts = { Approve: 0, Waitlist: 0, Hold: 0, Reject: 0 }, gone = 0;
-  S.apps.forEach(function (a) { if (a.withdrawn) { gone++; return; } var r = S.run.res[a.id]; if (r) counts[r.outcome]++; });
-  var total = counts.Approve + counts.Waitlist + counts.Hold + counts.Reject;
-  var slots = 0, filled = 0;
-  S.ters.forEach(function (t) { slots += t.slots; filled += Math.min(t.slots, S.run.approvedByTer[t.id] || 0); });
-  var locked = 0; S.ters.forEach(function (t) { t.pins.forEach(function (p) { if (S.run.ctx.storeByPin[p]) locked++; }); });
-  var tiles = [['all', 'All applications', total, 'ink']].concat(OUT.map(function (o) { return [o, { Approve: 'Approved', Waitlist: 'Waitlisted', Hold: 'On hold', Reject: 'Rejected' }[o], counts[o], OUT_CLASS[o]]; })).map(function (c) {
-    return '<button class="kpi' + (S.filter === c[0] ? ' on' : '') + '" data-act="filter" data-v="' + c[0] + '" aria-pressed="' + (S.filter === c[0]) + '"><span><i class="dot ' + c[3] + '"' + (c[3] === 'ink' ? ' style="background:var(--ink)"' : '') + '></i>' + c[1] + '</span><b>' + c[2] + '</b></button>';
-  }).join('');
-  return '<div class="summary"><p class="sum-meta">' + filled + ' of ' + slots + ' slots filled · ' + locked + ' pins locked by existing stores' + (gone ? ' · ' + gone + ' withdrawn' : '') + '</p>' +
-    '<div class="kpis" role="group" aria-label="Filter by outcome">' + tiles + '</div></div>';
+function slotsLine() {
+  var slots = 0, filled = 0, locked = 0, gone = 0;
+  S.ters.forEach(function (t) { slots += t.slots; filled += Math.min(t.slots, S.run.approvedByTer[t.id] || 0); t.pins.forEach(function (p) { if (S.run.ctx.storeByPin[p]) locked++; }); });
+  S.apps.forEach(function (a) { if (a.withdrawn) gone++; });
+  return filled + ' of ' + slots + ' slots filled · ' + locked + ' pins locked by existing stores' + (gone ? ' · ' + gone + ' withdrawn' : '');
+}
+function filterBar() {
+  var counts = { Approve: 0, Waitlist: 0, Hold: 0, Reject: 0 }, total = 0;
+  S.apps.forEach(function (a) { var r = S.run.res[a.id]; if (!a.withdrawn && r) { counts[r.outcome]++; total++; } });
+  var tabs = [['all', 'All', total, null]].concat(OUT.map(function (o) { return [o, { Approve: 'Approved', Waitlist: 'Waitlisted', Hold: 'On hold', Reject: 'Rejected' }[o], counts[o], OUT_CLASS[o]]; }));
+  return '<div class="seg-f" role="group" aria-label="Filter by outcome">' + tabs.map(function (c) {
+    return '<button class="' + (S.filter === c[0] ? 'on' : '') + '" data-act="filter" data-v="' + c[0] + '" aria-pressed="' + (S.filter === c[0]) + '">' + (c[3] ? '<i class="dot ' + c[3] + '"></i>' : '') + c[1] + ' <b>' + c[2] + '</b></button>';
+  }).join('') + '</div>';
 }
 
 function noticesHtml() {
@@ -231,7 +248,7 @@ function decisionsHtml() {
     return true;
   }).map(function (a) { shown++; return rowHtml(a); }).join('');
   var only = S.filterIds ? '<p class="only">Showing ' + esc(S.filterLabel || 'a selection') + ' (' + S.filterIds.length + '). <button class="link" data-act="clear-ids">Show all</button></p>' : '';
-  return summaryHtml() + only + '<div class="rows"><div class="rows-tools"><input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"><span class="count">Showing ' + shown + ' of ' + S.apps.length + '</span></div>' +
+  return only + '<div class="rows"><div class="rows-tools">' + filterBar() + '<input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"><span class="count">Showing ' + shown + ' of ' + S.apps.length + '</span></div>' +
     '<div class="row-head" aria-hidden="true"><span>ID</span><span>Applicant</span><span>Terr.</span><span>Outcome</span><span>Score</span><span>Why</span><span>Next action</span><span></span></div>' +
     (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
 }
@@ -389,7 +406,7 @@ function askHtml() {
     return m.who === 'me' ? '<div class="msg me">' + esc(m.text) + '</div>' : '<div class="msg desk">' + m.html + '</div>';
   }).join('');
   return '<div class="ask-in"><header><div><h2>Ask the desk</h2><p class="muted sm">Ask why, or tell it something new. Decisions update right away.</p></div>' +
-      '<button class="icon-b" data-act="ask-toggle" aria-label="Close Ask the desk" title="Close">×</button></header>' +
+      '<button class="icon-b" data-act="ask-toggle" aria-label="Close Ask the desk" title="Close"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></header>' +
     '<div class="log' + (log ? '' : ' is-empty') + '" id="log" aria-live="polite">' + (log || '<div class="ask-empty"><p>Plain language works. For example:</p></div>') + '</div>' +
     '<div class="sugg">' + sugg.slice(0, log ? 3 : 5).map(function (s) { return '<button class="chip" data-act="sugg" data-v="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div>' +
     '<div class="composer"><input id="askin" type="text" placeholder="Ask a question or give new information" autocomplete="off" aria-label="Ask a question or give new information"><button class="btn primary" data-act="ask">Ask</button></div>' +

@@ -105,7 +105,7 @@ css.textContent = [
   '.demo-hl { outline: 3px solid var(--accent) !important; outline-offset: 4px; border-radius: 12px; transition: outline-color .3s; }',
   '.demo-bar { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 50; width: min(760px, calc(100vw - 24px));',
   '  display: flex; align-items: center; gap: 14px; background: var(--ink); color: var(--bg); border-radius: 14px; padding: 12px 14px 12px 18px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }',
-  '.demo-bar p { margin: 0; flex: 1; font-size: 15.5px; line-height: 1.4; font-weight: 500; }',
+  '.demo-bar p { margin: 0; flex: 1; font-size: 14px; line-height: 1.4; font-weight: 500; }',
   '.demo-step { font-family: var(--display); font-weight: 800; font-size: 13px; opacity: .7; white-space: nowrap; }',
   '.demo-bar .btn { background: transparent; color: var(--bg); border-color: color-mix(in srgb, var(--bg) 40%, transparent); }'
 ].join('\n');

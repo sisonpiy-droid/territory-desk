@@ -60,9 +60,9 @@ document.addEventListener('change', function (e) {
 
 var css = document.createElement('style');
 css.textContent = '.pb-t td, .pb-t th { text-align: left; } .pb-t td.neg, b.neg { color: var(--no); }' + '.pb { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 4px 0 6px; } .pb > div { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--surface2); }' +
-  ' .pb > div.base { border-color: var(--accent); } .pb small { display: block; font-size: 12px; color: var(--muted); } .pb b { font-family: var(--display); font-size: 17px; }' +
-  ' .pb-tag { font-family: var(--body); font-size: 11.5px; font-weight: 600; color: var(--hold); border: 1px solid var(--hold); border-radius: 4px; padding: 0 6px; margin-left: 6px; vertical-align: 2px; }' +
+  ' .pb > div.base { border-color: var(--accent); } .pb small { display: block; font-size: 12px; color: var(--muted); } .pb b { font-family: var(--display); font-size: 16px; }' +
+  ' .pb-tag { font-family: var(--body); font-size: 12px; font-weight: 600; color: var(--hold); border: 1px solid var(--hold); border-radius: 4px; padding: 0 6px; margin-left: 6px; vertical-align: 2px; }' +
   ' .pb-a summary { cursor: pointer; font-size: 13px; color: var(--accent); } .pb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; margin-top: 6px; }' +
-  ' .pb-in { display: grid; grid-template-columns: 1fr 72px; gap: 0 8px; align-items: center; font-size: 13px; } .pb-in input, .pb-in select { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; background: var(--surface); } .pb-in select { grid-column: 2; width: auto; min-width: 72px; } .pb-in small { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; }';
+  ' .pb-in { display: grid; grid-template-columns: 1fr 72px; gap: 0 8px; align-items: center; font-size: 13px; } .pb-in input, .pb-in select { border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; background: var(--surface); } .pb-in select { grid-column: 2; width: auto; min-width: 72px; } .pb-in small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }';
 document.head.appendChild(css);
 })();

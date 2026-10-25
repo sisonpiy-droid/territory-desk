@@ -52,8 +52,8 @@ function tabHtml() {
 window.DeskExt.tabs.push({ id: 'fair', label: 'Data and fairness', render: tabHtml });
 
 var css = document.createElement('style');
-css.textContent = '.fr h3 { font-family: var(--display); font-size: 17px; font-weight: 800; } .fr h4.mt { font-family: var(--display); font-size: 15px; margin: 18px 0 6px; }' +
+css.textContent = '.fr h3 { font-family: var(--display); font-size: 16px; font-weight: 800; } .fr h4.mt { font-family: var(--display); font-size: 14px; margin: 18px 0 6px; }' +
   ' .fr-t td, .fr-t th { text-align: left; vertical-align: top; } .fr-l { padding-left: 18px; font-size: 14px; } .fr-l li { margin-bottom: 4px; }' +
-  ' .fr-warn { font-size: 13.5px; border-left: 3px solid var(--hold); background: var(--surface); padding: 6px 10px; border-radius: 4px; }';
+  ' .fr-warn { font-size: 13px; background: color-mix(in srgb, var(--hold) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--hold) 28%, transparent); padding: 6px 10px; border-radius: 8px; }';
 document.head.appendChild(css);
 })();
