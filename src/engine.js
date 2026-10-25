@@ -337,6 +337,18 @@ function evaluateApp(a, ctx) {
   } else if (a.floor === 'Upper' && /ground[\s-]?floor/.test(notes) && !/looking|searching|prefer|want|need/.test(notes)) {
     add('NOTES_CONFLICT', 'hold', 'Notes contradict the form', 'The form says upper floor, but the notes mention a ground-floor shop.');
   }
+  // numbers and floors in the notes that disagree with the form
+  if (!issues.some(function (i) { return i.code === 'NOTES_CONFLICT'; })) {
+    var said = [], rxS = /(\d{2,5})\s*(?:sq\.?\s?ft|sqft|square\s*feet|sft)\b/g, mS;
+    while ((mS = rxS.exec(notes))) said.push(+mS[1]);
+    var badSize = hasSpace && a.size && said.filter(function (v) { return Math.abs(v - a.size) / a.size > 0.25; })[0];
+    var mI = !/co-?invest|partner|family|brother|father|relative|\badd\b|extra|more|additional|loan/.test(notes) && /(?:invest\w*|capital|budget|savings)\D{0,20}?(?:rs\.?\s*)?(\d+(?:\.\d+)?)\s*(lakhs?|lacs?|crores?|cr)\b/.exec(notes);
+    var saidInvest = mI ? parseFloat(mI[1]) * (/^cr/.test(mI[2]) ? 100 : 1) : null;
+    if (badSize) add('NOTES_CONFLICT', 'hold', 'Notes contradict the form', 'The form says ' + a.size + ' sq ft, but the notes say ' + badSize + ' sq ft.');
+    else if (saidInvest && a.invest > 0 && Math.abs(saidInvest - a.invest) / a.invest > 0.2) add('NOTES_CONFLICT', 'hold', 'Notes contradict the form', 'The form says Rs ' + a.invest + ' lakh, but the notes say Rs ' + saidInvest + ' lakh.');
+    else if ((a.floor === 'Ground' || a.floor === 'Mall unit') && /\b(first|1st|second|2nd|upper|terrace)\s*floor/.test(notes) && !/looking|searching|prefer|want|need|would like/.test(notes)) add('NOTES_CONFLICT', 'hold', 'Notes contradict the form', 'The form says ' + a.floor.toLowerCase() + ', but the notes mention an upper floor.');
+  }
+  if (a.state && !/^(ka|karnataka|karnatka)\.?$/i.test(a.state.trim())) add('STATE_MISMATCH', 'hold', 'State is not Karnataka', 'The form says "' + a.state + '", but the brand opens stores in Karnataka only. One of state, city and pin code is wrong.');
 
   /* ---- soft flags: do not block, but lower confidence ---- */
   if (a.exp === 0 && /\b(run|runs|running|owner|owns|own|manage|manages|managing|operate|operates)\b[^.]{0,30}\b(shop|store|retail|showroom|outlet)/i.test(a.biz)) {
@@ -346,6 +358,8 @@ function evaluateApp(a, ctx) {
   }
   if (/\b(loan|bank|finance|mudra|borrow|subsidy|sanction)/.test(notesAll)) {
     add('LOAN', 'soft', 'Funding depends on a loan', 'The notes suggest part of the investment depends on a loan that may not be sanctioned yet.');
+  } else if (/co-?invest|\binvestor\b|partner will|family will|brother|father|relative|friends?\b/.test(notesAll)) {
+    add('FUNDING_OUTSIDE', 'soft', 'Part of the funding comes from someone else', 'The notes suggest a co-investor or family member is putting in part of the money, which is not yet proven.');
   }
   var nk = a.name.trim().toLowerCase();
   if (ctx.nameCount[nk] > 1) add('DUP_APPLICANT', 'soft', 'Same name on several applications', 'Another application carries the same applicant name; possible duplicate.');
@@ -416,6 +430,7 @@ function evaluateApp(a, ctx) {
   if (a.sizeAssumed) cond.push('Confirm the space is at least ' + cfg.minSpace + ' sq ft before the agreement is signed');
   if (hasSpace && a.floor === 'Not known') cond.push('Confirm the floor (ground floor or mall unit)');
   if (issues.some(function (i) { return i.code === 'LOAN'; })) cond.push('Show the loan sanction letter as proof of funds');
+  if (issues.some(function (i) { return i.code === 'FUNDING_OUTSIDE'; })) cond.push('Show proof of funds from the co-investor or family');
   if (issues.some(function (i) { return i.code === 'EXP_CONFLICT'; })) cond.push('Verify past retail experience during KYC');
   if (issues.some(function (i) { return i.code === 'DUP_APPLICANT'; })) cond.push('Confirm this is the only application from this person');
   if (a.space === 'Rented') cond.push('Registered lease for the space');
@@ -554,7 +569,7 @@ function simulateFixed(a, core0, apps, territories, stores, cfg) {
       case 'PIN_HAS_STORE': case 'PIN_OUTSIDE':
         if (fp.length) { b.pin = fp[0].pin; fixes.push('Take free pin ' + fp[0].pin + ' in ' + fp[0].ter); } else { possible = false; why = 'no_free_pin'; }
         break;
-      case 'PIN_MISMATCH': case 'PIN_BAD': case 'CITY_UNKNOWN': possible = false; why = 'pin_unknown'; break;
+      case 'PIN_MISMATCH': case 'PIN_BAD': case 'CITY_UNKNOWN': case 'STATE_MISMATCH': possible = false; why = 'pin_unknown'; break;
       case 'NO_SPACE': b.space = 'Rented'; b.size = cfg.idealMin; b.floor = 'Ground'; b.sizeAssumed = false; b.notesSuperseded = true; fixes.push('Find a rented ground-floor space of about ' + cfg.idealMin + ' sq ft'); break;
       case 'SIZE_MISSING': b.size = cfg.idealMin; fixes.push('Confirm a space of at least ' + cfg.idealMin + ' sq ft'); break;
       case 'SIZE_SMALL': b.size = cfg.idealMin; fixes.push('Move to a space of at least ' + cfg.idealMin + ' sq ft'); break;
@@ -700,6 +715,7 @@ function onboardingPlan(r, a, state) {
 var ASK = {
   PIN_BAD: { en: 'a valid 6-digit pin code', hi: 'सही 6 अंकों का पिन कोड', kn: 'ಸರಿಯಾದ 6 ಅಂಕಿಯ ಪಿನ್ ಕೋಡ್' },
   PIN_MISMATCH: { en: 'the correct pin code and city (the two do not match)', hi: 'सही पिन कोड और शहर (दोनों मेल नहीं खाते)', kn: 'ಸರಿಯಾದ ಪಿನ್ ಕೋಡ್ ಮತ್ತು ನಗರ (ಇವೆರಡೂ ಹೊಂದಿಕೆಯಾಗುತ್ತಿಲ್ಲ)' },
+  STATE_MISMATCH: { en: 'the correct state, city and pin code (the state is not Karnataka)', hi: 'सही राज्य, शहर और पिन कोड (राज्य कर्नाटक नहीं है)', kn: 'ಸರಿಯಾದ ರಾಜ್ಯ, ನಗರ ಮತ್ತು ಪಿನ್ ಕೋಡ್ (ರಾಜ್ಯ ಕರ್ನಾಟಕ ಅಲ್ಲ)' },
   CITY_UNKNOWN: { en: 'your city', hi: 'आपका शहर', kn: 'ನಿಮ್ಮ ನಗರ' },
   PIN_HAS_STORE: { en: 'a different pin code (we already have a store in this one)', hi: 'कोई दूसरा पिन कोड (इस पिन कोड में हमारा स्टोर पहले से है)', kn: 'ಬೇರೆ ಪಿನ್ ಕೋಡ್ (ಈ ಪಿನ್ ಕೋಡ್‌ನಲ್ಲಿ ನಮ್ಮ ಅಂಗಡಿ ಈಗಾಗಲೇ ಇದೆ)' },
   PIN_OUTSIDE: { en: 'a pin code inside our current expansion areas', hi: 'हमारे वर्तमान विस्तार क्षेत्रों के भीतर का पिन कोड', kn: 'ನಮ್ಮ ಪ್ರಸ್ತುತ ವಿಸ್ತರಣಾ ಪ್ರದೇಶಗಳೊಳಗಿನ ಪಿನ್ ಕೋಡ್' },

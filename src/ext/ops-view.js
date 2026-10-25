@@ -115,6 +115,12 @@ function strip() {
   return '<section class="attn" aria-label="Needs attention"><span><b>' + n + '</b> thing' + (n === 1 ? '' : 's') + ' need a person today</span>' + (bits.length ? '<span class="muted">' + bits.join(' · ') + '</span>' : '') + '<span class="grow"></span><button class="link" data-act="tab" data-v="overview">Open the worklist →</button></section>';
 }
 
+window.DeskExt.assumptions.push(function () {
+  var d = O.DEFAULT_TIME;
+  return [{ area: 'Time saved', name: 'Minutes by hand: screen one application / cross-check one pin / write one follow-up', def: [d.screenMin, d.pinMin, d.followMin].join(' / '), now: [T.screenMin, T.pinMin, T.followMin].join(' / '), where: 'Overview, Before and after', how: 'Time five real applications with the expansion team before the pilot and use the median.' },
+          { area: 'Time saved', name: 'Minutes with the desk: review one decision / send one message', def: [d.reviewMin, d.sendMin].join(' / '), now: [T.reviewMin, T.sendMin].join(' / '), where: 'Overview, Before and after', how: 'Time the same five applications in the tool during the pilot.' },
+          { area: 'Time saved', name: 'Hours of screening per day (to show days saved)', def: String(d.teamHours), now: String(T.teamHours), where: 'Overview, Before and after', how: "Ask the expansion team how many hours a day they really spend on screening." }];
+});
 window.DeskExt.afterSummary.push(strip);
 window.DeskExt.tabs.push({ id: 'overview', label: 'Overview', render: view, badge: function () { return S.run ? todo() : ''; } });
 window.DeskExt.afterRender.push(sync);

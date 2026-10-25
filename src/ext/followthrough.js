@@ -11,6 +11,7 @@ function fmtT(d) { return d.toLocaleString('en-IN', { day: 'numeric', month: 'sh
 function appLink(id) { return '<button class="link" data-act="open-app" data-v="' + esc(id) + '">' + esc(id) + '</button>'; }
 function short(id) { var a = D.getApp(id), r = S.run.res[id]; return a && r ? E.explain(r, a, { cfg: S.cfg, run: S.run }).short || '' : ''; }
 function log(e) { e.at = new Date(); S.log.push(e); }
+D.log = log;   // other pages add to the decision log through this
 
 /* ---------- decision log: every decision, override, what-if and change ---------- */
 window.DeskExt.afterRecompute.push(function (diff, first, cause) {
