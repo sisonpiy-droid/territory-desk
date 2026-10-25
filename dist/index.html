@@ -43,55 +43,89 @@ p { margin: 0 0 8px; }
 .grow { flex: 1; }
 
 /* top bar */
-.top { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line);
-  padding: calc(10px + env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px)) 10px max(18px, env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 20px; letter-spacing: -0.01em; }
+.top { position: sticky; top: 0; z-index: 30; height: calc(58px + env(safe-area-inset-top, 0px)); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: saturate(1.4) blur(8px); border-bottom: 1px solid var(--line);
+  padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); display: flex; align-items: center; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 800; font-size: 19px; letter-spacing: -0.01em; white-space: nowrap; }
 .brand small { font-family: var(--body); font-weight: 400; font-size: 13px; color: var(--muted); letter-spacing: 0; }
-.logo { width: 26px; height: 26px; }
-.top .actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
-.top .jump-ask { display: none; text-decoration: none; }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 600; font-size: 14px; }
+.logo { width: 26px; height: 26px; flex: none; }
+.top .actions { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+body:not(.has-data) #askbtn { display: none; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); font-weight: 600; font-size: 14px; white-space: nowrap; transition: border-color .15s, background .15s; }
 .btn:hover { border-color: var(--accent); }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); } .btn.ghost:hover { color: var(--ink); background: var(--surface2); }
 .btn.sm { padding: 5px 11px; font-size: 13px; }
 .btn[disabled], .link[disabled] { opacity: .4; cursor: default; }
+#askbtn[aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border-color: var(--accent); color: var(--accent); }
 .link { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; font-size: inherit; text-align: left; }
-#err { margin: 12px max(18px, env(safe-area-inset-left, 0px)) 0; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--no); color: var(--no); background: color-mix(in srgb, var(--no) 8%, var(--surface)); }
+.icon-b { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-size: 20px; line-height: 1; color: var(--muted); flex: none; }
+.icon-b:hover { color: var(--ink); border-color: var(--accent); }
+#err { margin: 12px auto 0; max-width: 980px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--no); color: var(--no); background: color-mix(in srgb, var(--no) 8%, var(--surface)); }
 
 /* empty state */
-.empty { max-width: 760px; margin: 0 auto; padding: 8vh 22px 10vh; }
+.empty { max-width: 780px; margin: 0 auto; padding: 9vh 22px 10vh; }
+.eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
 .empty h1 { font-family: var(--display); font-weight: 800; font-size: clamp(32px, 5.4vw, 52px); line-height: 1.04; letter-spacing: -0.02em; margin-bottom: 16px; }
 .lede { font-size: 17px; color: var(--muted); max-width: 60ch; }
 .lede.sm { font-size: 14.5px; margin-bottom: 14px; }
-.drop { margin-top: 26px; border: 2px dashed var(--line); border-radius: 14px; padding: 30px 22px; display: flex; gap: 14px; align-items: center; justify-content: center; flex-wrap: wrap; background: var(--surface); }
-.drop span { color: var(--muted); }
-.fine { margin-top: 16px; font-size: 13px; color: var(--muted); }
+.drop { margin-top: 26px; border: 2px dashed var(--line); border-radius: 16px; padding: 22px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; background: var(--surface); transition: border-color .15s, background .15s; }
+.drop:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+.drop > div:nth-child(2) { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 2px; }
+.drop-i { width: 44px; height: 44px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 12%, var(--surface)); position: relative; flex: none; }
+.drop-i::before { content: ""; position: absolute; inset: 14px 13px 10px; border: 2px solid var(--accent); border-top: 0; border-radius: 0 0 4px 4px; }
+.drop-i::after { content: ""; position: absolute; left: 50%; top: 9px; width: 2px; height: 18px; background: var(--accent); transform: translateX(-50%); }
+.drop-b { display: flex; gap: 8px; flex-wrap: wrap; }
+.steps { list-style: none; counter-reset: st; padding: 0; margin: 26px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.steps li { counter-increment: st; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.steps li::before { content: counter(st); width: 22px; height: 22px; border-radius: 50%; background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 700; display: grid; place-items: center; margin-bottom: 6px; }
+.steps span { color: var(--muted); font-size: 13.5px; }
+.fine { margin-top: 18px; font-size: 13px; color: var(--muted); }
 
-/* workspace */
-.workspace { max-width: 1480px; margin: 0 auto; padding: 18px max(18px, env(safe-area-inset-right, 0px)) 40px max(18px, env(safe-area-inset-left, 0px)); display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 22px; align-items: start; }
-.primary { min-width: 0; }
-.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
-.sum-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.sum-top h2 { font-family: var(--display); font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
-.sum-meta { font-size: 13.5px; color: var(--muted); }
-.bar { display: flex; gap: 3px; height: 14px; border-radius: 7px; overflow: hidden; background: var(--surface2); }
+/* app shell: sidebar, page, ask panel */
+.shell { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: calc(100vh - 58px); }
+.side { position: sticky; top: 58px; height: calc(100vh - 58px); overflow-y: auto; border-right: 1px solid var(--line); background: var(--surface); padding: 14px 10px; display: flex; flex-direction: column; gap: 14px; }
+.nav-g p { font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin: 0 10px 4px; }
+.nav-i { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; border: 0; border-radius: 8px; background: none; font-size: 14.5px; font-weight: 500; color: var(--ink); text-align: left; position: relative; }
+.nav-i:hover { background: var(--surface2); }
+.nav-i.on { background: color-mix(in srgb, var(--accent) 11%, var(--surface)); color: var(--accent); font-weight: 600; }
+.nav-i.on::before { content: ""; position: absolute; left: -10px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.nb { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface2); border-radius: 999px; padding: 0 7px; }
+.nav-i.on .nb { color: var(--accent); background: var(--surface); }
+.nav-foot { margin-top: auto; padding: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.nav-foot p { margin: 0; }
+.main { min-width: 0; padding: 18px 28px 48px; container-type: inline-size; }
+/* when the page column is narrow (Ask panel open on a laptop), rows switch to the compact layout */
+@container (max-width: 780px) {
+  .row-h { grid-template-columns: auto minmax(0, 1fr) auto 44px 14px; row-gap: 2px; }
+  .row-h .rwhy { grid-column: 1 / -1; grid-row: 2; white-space: normal; }
+  .row.open .row-h .rwhy { display: none; }
+}
+.main > * { max-width: 1120px; }
+.page-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.page-h h1 { font-family: var(--display); font-size: 24px; font-weight: 800; letter-spacing: -0.015em; }
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+.sum-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.sum-top h2 { font-family: var(--display); font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.sum-meta { font-size: 13px; color: var(--muted); }
+.bar { display: flex; gap: 3px; height: 10px; border-radius: 6px; overflow: hidden; background: var(--surface2); }
 .seg { display: block; min-width: 6px; background: var(--c, var(--gone)); }
-.legend { display: flex; gap: 4px 16px; flex-wrap: wrap; margin-top: 10px; }
-.leg { background: none; border: 0; padding: 2px 0; display: inline-flex; align-items: center; gap: 7px; font-size: 14px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); display: inline-block; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); display: inline-block; flex: none; }
 .ok { --c: var(--ok); } .wait { --c: var(--wait); } .hold { --c: var(--hold); } .no { --c: var(--no); } .gone { --c: var(--gone); }
-.notices { margin-bottom: 12px; }
-.notices p { font-size: 13.5px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--hold); border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; }
-
+.notices { margin-bottom: 12px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--hold); border-radius: 8px; padding: 8px 12px; font-size: 13.5px; }
+.notices summary { cursor: pointer; font-weight: 600; } .notices p { margin: 6px 0 0; }
 .tabs { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 14px; flex-wrap: wrap; }
-.tabs .btn { flex: none; white-space: nowrap; margin-bottom: 4px; }
 .tab { white-space: nowrap; background: none; border: 0; padding: 10px 14px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tab.on { color: var(--ink); border-bottom-color: var(--accent); }
-.toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 10px; }
+.toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 12px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: 13.5px; font-weight: 500; text-align: left; }
+.chip:hover { border-color: var(--accent); }
 .chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-.search { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 12px; min-width: 220px; }
+.fchip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 13.5px; font-weight: 500; }
+.fchip b { font-weight: 700; } .fchip:hover { border-color: var(--accent); }
+.fchip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.search { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 7px 12px; min-width: 240px; }
 
 /* decision rows */
 .rows { display: flex; flex-direction: column; gap: 6px; }
@@ -114,10 +148,16 @@ p { margin: 0 0 8px; }
 .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--c); background: color-mix(in srgb, var(--c) 13%, var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 35%, transparent); white-space: nowrap; }
 .pill.sm { padding: 0 8px; font-size: 12px; }
 
-.detail { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 26px; padding: 6px 18px 20px; border-top: 1px solid var(--line); }
-.detail h4 { font-family: var(--display); font-size: 15px; margin: 16px 0 6px; }
-.detail h4:first-child { margin-top: 12px; }
-.dcol p { font-size: 14.5px; }
+.detail { border-top: 1px solid var(--line); }
+.dtabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.dtab { background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 10px 12px; font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.dtab:hover { color: var(--ink); } .dtab.on { color: var(--accent); border-bottom-color: var(--accent); }
+.dbody { padding: 6px 18px 18px; max-width: 780px; }
+.dbody h4 { font-family: var(--display); font-size: 15px; margin: 16px 0 6px; }
+.dbody > h4:first-child { margin-top: 12px; }
+.dbody h4.lead-h { font-size: 16.5px; }
+.dbody p { font-size: 14.5px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; } .btn-row p { margin: 0; }
 .cond { background: var(--surface2); border-radius: 6px; padding: 8px 10px; font-size: 13.5px !important; }
 .tl { list-style: none; margin: 8px 0; padding: 0; }
 .tl li { border-left: 2px solid var(--line); padding: 0 0 12px 14px; position: relative; font-size: 14.5px; }
@@ -182,47 +222,65 @@ button.tile:hover { transform: translateY(-1px); }
 .rules { padding-left: 20px; font-size: 14px; color: var(--muted); }
 .rules li { margin-bottom: 4px; }
 
-/* ask panel */
-.ask { position: sticky; top: calc(66px + env(safe-area-inset-top, 0px)); }
-.ask-in { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 92px); }
-.ask-in h2 { font-family: var(--display); font-size: 19px; font-weight: 800; }
-.log { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 96px; flex: 1 1 auto; padding-right: 2px; }
-.msg { border-radius: 10px; padding: 9px 12px; font-size: 14px; max-width: 100%; }
+/* ask panel: a column on wide screens, a drawer below 1280 px */
+.ask { display: none; }
+.shell.ask-open { grid-template-columns: 216px minmax(0, 1fr) 380px; }
+.shell.ask-open .ask { display: block; position: sticky; top: 58px; height: calc(100vh - 58px); border-left: 1px solid var(--line); background: var(--surface); }
+.ask-scrim { display: none; }
+.ask-in { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; height: 100%; }
+.ask-in header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.ask-in h2 { font-family: var(--display); font-size: 18px; font-weight: 800; }
+.ask-empty p { color: var(--muted); font-size: 13.5px; margin: 0; }
+.log.is-empty { flex: 0 0 auto; min-height: 0; }
+.log { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 60px; flex: 1 1 auto; padding-right: 2px; }
+.msg { border-radius: 12px; padding: 9px 12px; font-size: 14px; max-width: 100%; }
 .msg p { font-size: 14px; margin-bottom: 6px; } .msg p:last-child { margin-bottom: 0; }
-.msg.me { align-self: flex-end; background: var(--accent); color: var(--accent-ink); max-width: 88%; }
-.msg.desk { background: var(--surface2); border: 1px solid var(--line); }
+.msg.me { align-self: flex-end; background: var(--accent); color: var(--accent-ink); max-width: 88%; border-bottom-right-radius: 4px; }
+.msg.desk { background: var(--surface2); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .msg .nx { color: var(--muted); }
 .msg .ap { font-weight: 500; }
 .diff { list-style: none; padding: 0; margin: 4px 0 8px; font-size: 13.5px; }
 .diff li { padding: 3px 0; }
 .sugg { display: flex; flex-wrap: wrap; gap: 6px; }
+.sugg .chip { font-size: 13px; padding: 3px 10px; }
 .composer { display: flex; gap: 8px; }
-.composer input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; background: var(--surface); }
+.composer input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; background: var(--surface); }
+.composer input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 .ask-tools { display: flex; justify-content: space-between; font-size: 13px; }
 .cmp { border-collapse: collapse; font-size: 13.5px; width: 100%; }
 .cmp th, .cmp td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; }
 .cmp th:first-child, .cmp td:first-child { text-align: left; }
 .cmp .tot td { font-weight: 600; }
 
-@media (max-width: 1060px) {
-  .workspace { grid-template-columns: minmax(0, 1fr); }
-  .ask { position: static; }
-  body:has(.workspace) .top .jump-ask { display: inline-flex; }
-  .ask-in { max-height: none; }
-  .log { max-height: 420px; }
-  .detail { grid-template-columns: minmax(0, 1fr); gap: 0; }
+@media (max-width: 1279px) {
+  .shell.ask-open { grid-template-columns: 216px minmax(0, 1fr); }
+  .shell.ask-open .ask { position: fixed; top: 58px; right: 0; bottom: 0; height: auto; width: min(400px, 100vw); z-index: 40; box-shadow: -12px 0 32px rgba(0, 0, 0, .18); }
+  .shell.ask-open .ask-scrim { display: block; position: fixed; inset: 58px 0 0 0; z-index: 39; border: 0; background: rgba(10, 16, 24, .28); }
+}
+@media (max-width: 899px) {
+  .shell, .shell.ask-open { grid-template-columns: minmax(0, 1fr); }
+  .side { position: sticky; top: 58px; z-index: 20; height: auto; flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 6px 10px; gap: 4px; border-right: 0; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+  .nav-g { display: flex; gap: 2px; } .nav-g p { display: none; }
+  .nav-i { width: auto; white-space: nowrap; padding: 6px 10px; font-size: 14px; } .nav-i.on::before { display: none; }
+  .nav-foot { margin: 0; padding: 0 0 0 6px; border: 0; flex-direction: row; } .nav-foot p { display: none; }
+  .main { padding: 14px 14px 40px; }
+  .page-h h1 { font-size: 21px; }
+  .search { min-width: 0; width: 100%; }
+  .steps { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 720px) {
   .row-h { grid-template-columns: auto minmax(0, 1fr) auto 14px; row-gap: 4px; }
   .brand small { display: none; }
   .row-h .score { display: none; }
   .row-h .rwhy { grid-column: 1 / -1; white-space: normal; }
-  .rout { grid-column: 3; }
+  .rout { grid-column: 3; flex-wrap: wrap; justify-content: flex-end; }
   .assume .a-grid { grid-template-columns: minmax(0, 1fr); }
   .w-grid { grid-template-columns: minmax(0, 1fr); }
-  .top .actions { margin-left: 0; width: 100%; }
-  .tabs { flex-wrap: wrap; } .tabs .grow { display: none; }
-  .top { position: static; }
+  .top .actions .hide-s { display: none; }
+  .row-h .conf, .row-h .ovl { display: none; }
+  .top { gap: 8px; } .brand { font-size: 17px; } .top .btn { padding: 7px 11px; }
+  .shell.ask-open .ask { width: 100vw; }
+  .dbody { padding: 4px 14px 16px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } button.tile:hover { transform: none; } }
 </style>
@@ -234,13 +292,13 @@ button.tile:hover { transform: translateY(-1px); }
     Territory Desk <small>Franchise partner decisions</small>
   </div>
   <div class="actions">
-    <a class="btn jump-ask" href="#ask">Ask a question</a>
-    <button class="btn" data-act="sample">Load sample data</button>
-    <label class="btn primary">Upload workbook<input type="file" id="file" accept=".xlsx,.xls" hidden></label>
+    <button class="btn" id="askbtn" data-act="ask-toggle" aria-expanded="false">Ask the desk</button>
+    <button class="btn ghost hide-s" data-act="sample">Try sample</button>
+    <label class="btn primary">Upload<span class="hide-s">&nbsp;workbook</span><input type="file" id="file" accept=".xlsx,.xls" hidden></label>
   </div>
 </header>
 <div id="err" role="alert" hidden></div>
-<main id="app"></main>
+<div id="app"></div>
 
 <!-- SheetJS is served from this site (vendor/, copied by build.js) so a CDN outage cannot break uploads -->
 <script src="xlsx.full.min.js"></script>
@@ -2083,7 +2141,7 @@ function extTab(id) { return window.DeskExt.tabs.filter(function (t) { return t.
 
 var S = {
   apps: [], ters: [], cfg: E.clone(E.DEFAULT_CFG), run: null, prevSnap: null, changed: {},
-  notices: [], tab: 'decisions', filter: 'all', q: '', open: {}, letterLang: {}, undo: [], label: '',
+  notices: [], tab: 'decisions', filter: 'all', q: '', open: {}, dtab: {}, letterLang: {}, undo: [], label: '',
   exampleApp: null, exampleTer: null, askLog: []
 };
 
@@ -2162,25 +2220,65 @@ function addWeeks(w) { var d = new Date(); d.setDate(d.getDate() + w * 7); retur
 /* ------------------------------------------------------------------ */
 /* Rendering                                                           */
 /* ------------------------------------------------------------------ */
+// Sidebar: pages grouped by the job they serve. Pages added by src/ext/* appear where listed here, or under "More".
+var NAV = [
+  ['Today', ['overview', 'decisions', 'board']],
+  ['Plan', ['sites', 'pipeplan', 'scen']],
+  ['Deliver', ['onboard', 'reports']],
+  ['Records', ['log', 'fair', 'assume']]
+];
+var BUILTIN = { decisions: 'Decisions', board: 'Pin board', assume: 'Assumptions' };
+function pages() {
+  var all = {}; Object.keys(BUILTIN).forEach(function (k) { all[k] = { id: k, label: BUILTIN[k] }; });
+  window.DeskExt.tabs.forEach(function (t) { all[t.id] = t; });
+  return all;
+}
 function render() {
   var root = $('#app');
+  document.body.classList.toggle('has-data', !!S.run);
   if (!S.run) { root.innerHTML = emptyState(); return; }
+  if (S.askOpen === undefined) S.askOpen = window.innerWidth >= 1280;
+  var pg = pages()[S.tab] || pages().decisions;
   root.innerHTML =
-    '<section class="workspace">' +
-      '<div class="primary">' + summaryHtml() + noticesHtml() + extHtml() + tabsHtml() + '<div id="tabbody">' + tabBody() + '</div></div>' +
-      '<aside class="ask" id="ask">' + askHtml() + '</aside>' +
-    '</section>';
+    '<div class="shell' + (S.askOpen ? ' ask-open' : '') + '">' +
+      '<nav class="side" aria-label="Pages">' + navHtml() + '</nav>' +
+      '<main class="main" id="main"><header class="page-h"><h1>' + esc(pg.label) + '</h1>' + (S.tab === 'decisions' ? '' : '<span class="muted sm">' + fileLine() + '</span>') + '</header>' +
+        noticesHtml() + (S.tab === 'decisions' ? extHtml() : '') + '<div id="tabbody">' + tabBody() + '</div></main>' +
+      '<aside class="ask" id="ask" aria-label="Ask the desk">' + askHtml() + '</aside>' +
+      '<button class="ask-scrim" data-act="ask-toggle" aria-label="Close Ask the desk" tabindex="-1"></button>' +
+    '</div>';
+  var tb = $('#askbtn'); if (tb) tb.setAttribute('aria-expanded', String(!!S.askOpen));
   scrollAskToEnd();
   window.DeskExt.afterRender.forEach(function (fn) { try { fn(S); } catch (e) { console.error(e); } });
+}
+function fileLine() {
+  var n = S.apps.filter(function (a) { return !a.withdrawn; }).length;
+  return n + ' applications' + (S.label ? ' from ' + esc(S.label) : '');
+}
+function navHtml() {
+  var all = pages(), used = {};
+  var item = function (id) {
+    var p = all[id]; if (!p) return ''; used[id] = 1;
+    var badge = id === 'decisions' ? S.apps.filter(function (a) { return !a.withdrawn; }).length : p.badge ? p.badge(S) : '';
+    return '<button class="nav-i' + (S.tab === id ? ' on' : '') + '" data-act="tab" data-v="' + id + '"' + (S.tab === id ? ' aria-current="page"' : '') + '><span>' + esc(p.label) + '</span>' + (badge !== '' && badge != null ? '<b class="nb">' + esc(badge) + '</b>' : '') + '</button>';
+  };
+  var html = NAV.map(function (g) { var items = g[1].map(item).join(''); return items ? '<div class="nav-g"><p>' + g[0] + '</p>' + items + '</div>' : ''; }).join('');
+  var rest = Object.keys(all).filter(function (id) { return !used[id]; }).map(item).join('');
+  if (rest) html += '<div class="nav-g"><p>More</p>' + rest + '</div>';
+  return html + '<div class="nav-foot"><button class="btn sm" data-act="export">Export to Excel</button><p class="muted sm">' + fileLine() + '</p></div>';
 }
 
 function emptyState() {
   return '<section class="empty">' +
+    '<p class="eyebrow">Franchise partner desk</p>' +
     '<h1>Every franchise application, decided and explained.</h1>' +
-    '<p class="lede">Upload the Applications and Territories workbook. Each partner gets an outcome, the reason, what to do next and a training plan. Pin codes are protected so the brand never opens two stores in one.</p>' +
-    '<div class="drop" id="drop"><strong>Drop the .xlsx here</strong><span>or</span>' +
-      '<label class="btn primary">Choose a file<input type="file" id="file2" accept=".xlsx,.xls" hidden></label>' +
-      '<button class="btn" data-act="sample">Try the sample data</button></div>' +
+    '<p class="lede">Upload the Applications and Territories workbook. Each partner gets an outcome, the reason, what to do next and a training plan. The brand never opens two stores in one pin code.</p>' +
+    '<div class="drop" id="drop"><div class="drop-i" aria-hidden="true"></div><div><strong>Drop the .xlsx file here</strong><span class="muted sm">Applications and Territories sheets, as in the judges\' template</span></div>' +
+      '<div class="drop-b"><label class="btn primary">Choose a file<input type="file" id="file2" accept=".xlsx,.xls" hidden></label>' +
+      '<button class="btn" data-act="sample">Try the sample data</button></div></div>' +
+    '<ol class="steps"><li><b>Upload</b><span>Every application is checked and decided in about a second.</span></li>' +
+      '<li><b>Review</b><span>See why, what is missing, and what needs a person today.</span></li>' +
+      '<li><b>Ask</b><span>Ask why, or tell the desk something new; decisions update.</span></li></ol>' +
     '<p class="fine">Nothing is uploaded anywhere: the workbook is read and decided inside your browser. <button class="link" data-act="dl-sample">Download a sample workbook</button> to see the expected layout.</p>' +
   '</section>';
 }
@@ -2193,25 +2291,19 @@ function summaryHtml() {
   S.ters.forEach(function (t) { slots += t.slots; filled += Math.min(t.slots, S.run.approvedByTer[t.id] || 0); });
   var locked = 0; S.ters.forEach(function (t) { t.pins.forEach(function (p) { if (S.run.ctx.storeByPin[p]) locked++; }); });
   var bar = OUT.map(function (o) { return counts[o] ? '<i class="seg ' + OUT_CLASS[o] + '" style="flex:' + counts[o] + '" title="' + o + ' ' + counts[o] + '"></i>' : ''; }).join('');
-  var legend = OUT.map(function (o) {
-    return '<button class="leg" data-act="filter" data-v="' + o + '"><span class="dot ' + OUT_CLASS[o] + '"></span><b>' + counts[o] + '</b> ' + { Approve: 'approved', Waitlist: 'waitlisted', Hold: 'on hold', Reject: 'rejected' }[o] + '</button>';
+  var chips = [['all', 'All', total]].concat(OUT.map(function (o) { return [o, { Approve: 'Approved', Waitlist: 'Waitlisted', Hold: 'On hold', Reject: 'Rejected' }[o], counts[o]]; })).map(function (c) {
+    return '<button class="fchip' + (S.filter === c[0] ? ' on' : '') + '" data-act="filter" data-v="' + c[0] + '" aria-pressed="' + (S.filter === c[0]) + '">' + (c[0] === 'all' ? '' : '<span class="dot ' + OUT_CLASS[c[0]] + '"></span>') + c[1] + ' <b>' + c[2] + '</b></button>';
   }).join('');
   return '<div class="summary">' +
-    '<div class="sum-top"><h2>' + total + ' applications' + (S.label ? ' <span class="muted">from ' + esc(S.label) + '</span>' : '') + '</h2>' +
-    '<div class="sum-meta">' + filled + ' of ' + slots + ' territory slots filled. ' + locked + ' pin codes locked by existing stores.' + (gone ? ' ' + gone + ' withdrawn.' : '') + '</div></div>' +
-    '<div class="bar" role="img" aria-label="Outcome split">' + bar + '</div><div class="legend">' + legend + '</div></div>';
+    '<div class="sum-top"><div class="sum-meta"><b>' + total + ' applications</b>' + (S.label ? ' from ' + esc(S.label) : '') + ' · ' + filled + ' of ' + slots + ' slots filled · ' + locked + ' pins locked by existing stores' + (gone ? ' · ' + gone + ' withdrawn' : '') + '</div></div>' +
+    '<div class="bar" role="img" aria-label="Outcome split">' + bar + '</div>' +
+    '<div class="toolbar"><div class="chips" role="group" aria-label="Filter by outcome">' + chips + '</div>' +
+    '<input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"></div></div>';
 }
 
 function noticesHtml() {
   if (!S.notices.length) return '';
-  return '<div class="notices">' + S.notices.map(function (n) { return '<p>' + n + '</p>'; }).join('') + '</div>';
-}
-
-function tabsHtml() {
-  var t = [['decisions', 'Decisions'], ['board', 'Pin board'], ['assume', 'Assumptions']].concat(window.DeskExt.tabs.map(function (x) { return [x.id, x.label]; }));
-  return '<div class="tabs" role="tablist">' + t.map(function (x) {
-    return '<button role="tab" class="tab' + (S.tab === x[0] ? ' on' : '') + '" aria-selected="' + (S.tab === x[0]) + '" data-act="tab" data-v="' + x[0] + '">' + x[1] + '</button>';
-  }).join('') + '<span class="grow"></span><button class="btn sm" data-act="export">Export decisions</button></div>';
+  return '<details class="notices"><summary>' + S.notices.length + ' note' + (S.notices.length > 1 ? 's' : '') + ' about this file</summary>' + S.notices.map(function (n) { return '<p>' + n + '</p>'; }).join('') + '</details>';
 }
 
 function tabBody() {
@@ -2224,9 +2316,6 @@ function tabBody() {
 /* ---------- Decisions ---------- */
 function decisionsHtml() {
   var q = S.q.trim().toLowerCase();
-  var chips = ['all'].concat(OUT).map(function (o) {
-    return '<button class="chip' + (S.filter === o ? ' on' : '') + '" data-act="filter" data-v="' + o + '">' + (o === 'all' ? 'All' : o) + '</button>';
-  }).join('');
   var rows = S.apps.filter(function (a) {
     var r = S.run.res[a.id], o = a.withdrawn ? 'Withdrawn' : r.outcome;
     if (S.filterIds && S.filterIds.indexOf(a.id) < 0) return false;
@@ -2235,9 +2324,7 @@ function decisionsHtml() {
     return true;
   }).map(rowHtml).join('');
   var only = S.filterIds ? '<p class="only">Showing ' + esc(S.filterLabel || 'a selection') + ' (' + S.filterIds.length + '). <button class="link" data-act="clear-ids">Show all</button></p>' : '';
-  return only + '<div class="toolbar"><div class="chips">' + chips + '</div>' +
-    '<input id="q" class="search" type="search" placeholder="Search ID, name, pin, city" value="' + esc(S.q) + '" aria-label="Search applications"></div>' +
-    '<div class="rows">' + (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
+  return summaryHtml() + only + '<div class="rows">' + (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
 }
 
 function rowHtml(a) {
@@ -2284,13 +2371,26 @@ function detailHtml(a, r, x) {
   var rec = [['Investment', a.invest === null ? 'not given' : 'Rs ' + a.invest + ' lakh'], ['Experience', a.exp === null ? 'not given' : a.exp + ' yrs'], ['Business', a.biz || 'not given'],
     ['Space', a.space + (a.size !== null ? ', ' + a.size + ' sq ft' : '') + ', ' + a.floor.toLowerCase()], ['Target launch', a.launch === null ? 'not given' : a.launch + ' months'], ['Training language', a.lang || 'not given'], ['Notes', a.notes || 'none']]
     .map(function (z) { return '<dt>' + z[0] + '</dt><dd>' + esc(z[1]) + '</dd>'; }).join('');
-  var ext = window.DeskExt.afterDetail.map(function (fn) { try { return fn(a, r, S) || ''; } catch (e) { return ''; } }).join('');
-  return '<div class="detail"><div class="dcol"><h4>Why</h4>' + why + next + plan + ext + '</div>' +
-    '<div class="dcol"><h4>' + (r.outcome === 'Hold' || r.outcome === 'Reject' ? 'Indicative score (not ranked)' : 'Score out of 100') + '</h4>' + bars +
-    '<h4>Data flags</h4><ul class="flags">' + flags + '</ul>' +
-    '<h4>Message to the applicant</h4><div class="seg-g">' + langs + '</div><p class="letter" lang="' + (lang === 'Hindi' ? 'hi' : lang === 'Kannada' ? 'kn' : 'en') + '">' + esc(msg) + '</p>' +
-    '<button class="btn sm" data-act="copy" data-id="' + esc(a.id) + '">Copy message</button>' +
-    '<h4>What was submitted</h4><dl class="rec">' + rec + '</dl></div></div>';
+  // extension sections: a function (shown under Why) or { group: 'why'|'plan'|'score'|'message'|'actions', fn }
+  var ext = { why: '', plan: '', score: '', message: '', actions: '' };
+  window.DeskExt.afterDetail.forEach(function (h) {
+    var fn = typeof h === 'function' ? h : h.fn, g = typeof h === 'function' ? 'why' : h.group;
+    try { ext[g] = (ext[g] || '') + (fn(a, r, S) || ''); } catch (e) { /* a failing section never breaks the record */ }
+  });
+  var secs = [
+    ['why', 'Why', '<h4 class="lead-h">' + esc(x.headline) + '</h4>' + why + next + ext.why],
+    ['plan', r.outcome === 'Approve' ? 'Plan' : 'Next steps', plan + ext.plan || '<p class="muted">Nothing to plan until this application is approved.</p>'],
+    ['score', 'Score and data', '<h4>' + (r.outcome === 'Hold' || r.outcome === 'Reject' ? 'Indicative score (not ranked)' : 'Score out of 100') + '</h4>' + bars +
+      '<h4>Data flags</h4><ul class="flags">' + flags + '</ul>' + ext.score + '<h4>What was submitted</h4><dl class="rec">' + rec + '</dl>'],
+    ['message', 'Message', '<div class="seg-g">' + langs + '</div><p class="letter" lang="' + (lang === 'Hindi' ? 'hi' : lang === 'Kannada' ? 'kn' : 'en') + '">' + esc(msg) + '</p>' +
+      '<div class="btn-row"><button class="btn sm primary" data-act="copy" data-id="' + esc(a.id) + '">Copy message</button>' + ext.message + '</div>'],
+    ['actions', 'Override', ext.actions || '<p class="muted">No actions available.</p>']
+  ];
+  var cur = S.dtab[a.id] || 'why';
+  if (!secs.some(function (s) { return s[0] === cur; })) cur = 'why';
+  return '<div class="detail"><div class="dtabs" role="tablist">' + secs.map(function (s) {
+      return '<button role="tab" class="dtab' + (cur === s[0] ? ' on' : '') + '" aria-selected="' + (cur === s[0]) + '" data-act="dtab" data-id="' + esc(a.id) + '" data-v="' + s[0] + '">' + s[1] + '</button>';
+    }).join('') + '</div><div class="dbody" role="tabpanel">' + secs.filter(function (s) { return s[0] === cur; })[0][2] + '</div></div>';
 }
 
 /* ---------- Pin board ---------- */
@@ -2377,10 +2477,11 @@ function askHtml() {
   var log = S.askLog.map(function (m) {
     return m.who === 'me' ? '<div class="msg me">' + esc(m.text) + '</div>' : '<div class="msg desk">' + m.html + '</div>';
   }).join('');
-  return '<div class="ask-in"><header><h2>Ask the desk</h2><p class="muted sm">Ask why, or tell it something new. Decisions update right away.</p></header>' +
-    '<div class="log" id="log" aria-live="polite">' + (log || '<div class="msg desk">Try one of these, or type your own question.</div>') + '</div>' +
-    '<div class="sugg">' + sugg.slice(0, 5).map(function (s) { return '<button class="chip" data-act="sugg" data-v="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div>' +
-    '<div class="composer"><input id="askin" type="text" placeholder="e.g. APP-012 has found a 400 sq ft ground-floor shop" autocomplete="off" aria-label="Ask a question or give new information"><button class="btn primary" data-act="ask">Ask</button></div>' +
+  return '<div class="ask-in"><header><div><h2>Ask the desk</h2><p class="muted sm">Ask why, or tell it something new. Decisions update right away.</p></div>' +
+      '<button class="icon-b" data-act="ask-toggle" aria-label="Close Ask the desk" title="Close">×</button></header>' +
+    '<div class="log' + (log ? '' : ' is-empty') + '" id="log" aria-live="polite">' + (log || '<div class="ask-empty"><p>Plain language works. For example:</p></div>') + '</div>' +
+    '<div class="sugg">' + sugg.slice(0, log ? 3 : 5).map(function (s) { return '<button class="chip" data-act="sugg" data-v="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div>' +
+    '<div class="composer"><input id="askin" type="text" placeholder="Ask a question or give new information" autocomplete="off" aria-label="Ask a question or give new information"><button class="btn primary" data-act="ask">Ask</button></div>' +
     '<div class="ask-tools"><button class="link" data-act="undo"' + (S.undo.length ? '' : ' disabled') + '>Undo last change</button><button class="link" data-act="reset-data">Restore uploaded data</button></div></div>';
 }
 function firstOf(o) { var a = S.apps.filter(function (x) { return !x.withdrawn && S.run.res[x.id] && S.run.res[x.id].outcome === o; })[0]; return a ? a.id : ''; }
@@ -2641,9 +2742,10 @@ function ask(text) {
   try { html = answer(text); } catch (e) { html = '<p>Something went wrong reading that: ' + esc(e.message) + '</p>'; }
   S.cause = null;
   S.askLog.push({ who: 'desk', html: html });
+  if (!S.askOpen) { S.askOpen = true; var sh = $('.shell'); if (sh) sh.classList.add('ask-open'); }   // an answer is always visible
   var asideEl = $('#ask'); if (asideEl) asideEl.innerHTML = askHtml();
   scrollAskToEnd();
-  var inp = $('#askin'); if (inp) inp.focus();
+  var inp = $('#askin'); if (inp && window.innerWidth >= 900) inp.focus();
 }
 
 /* ------------------------------------------------------------------ */
@@ -2715,7 +2817,9 @@ document.addEventListener('click', function (e) {
     case 'sample': load(SD.appsAoA, SD.tersAoA, 'sample data'); break;
     case 'dl-sample': downloadSample(); break;
     case 'export': exportDecisions(); break;
-    case 'tab': S.tab = v; render(); break;
+    case 'tab': S.tab = v; if (window.innerWidth < 1280) S.askOpen = false; render(); document.documentElement.scrollTop = 0; break;
+    case 'dtab': S.dtab[el.getAttribute('data-id')] = v; refreshBody(); break;
+    case 'ask-toggle': S.askOpen = !S.askOpen; render(); if (S.askOpen) { var ai = $('#askin'); if (ai) ai.focus(); } break;
     case 'clear-ids': S.filterIds = null; refreshBody(); break;
     case 'filter': S.filterIds = null; S.filter = v; S.tab = 'decisions'; render(); break;
     case 'toggle': S.open[v] = !S.open[v]; refreshBody(); break;
@@ -2728,7 +2832,7 @@ document.addEventListener('click', function (e) {
       else { var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (x) {} document.body.removeChild(ta); done(); }
       break; }
     case 'pin': S.filterIds = null; S.tab = 'decisions'; S.filter = 'all'; S.q = v; render(); break;
-    case 'open-app': S.filterIds = null; S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.open[v] = true; render();
+    case 'open-app': S.filterIds = null; S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.open[v] = true; if (window.innerWidth < 1280) S.askOpen = false; render();
       var row = document.getElementById('row-' + v); if (row) row.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
     case 'ask': { var i = $('#askin'); ask(i.value); break; }
     case 'sugg': ask(v); break;
@@ -3034,7 +3138,7 @@ function word(o) { return { Approve: 'approved', Waitlist: 'waitlisted', Hold: '
 function play() {
   stop();
   var N = 9;
-  S.run = null; S.open = {}; D.rerender(); window.scrollTo(0, 0);
+  S.run = null; S.open = {}; D.rerender(); document.documentElement.scrollTop = 0;
   say(1, N, 'The expansion team uploads this week\'s Applications and Territories workbook.');
   hl('.drop');
 
@@ -3045,12 +3149,12 @@ function play() {
     say(2, N, 'Every application is decided in a second: ' + c.Approve + ' approved, ' + c.Waitlist + ' waitlisted, ' + c.Hold + ' on hold, ' + c.Reject + ' rejected. Never two stores in one pin code.');
     hl('.summary');
   });
-  later(9500, function () { say(3, N, 'Where applications drop out, and why. Click any step to see who.'); hl('.pipe-card'); });
-  later(15500, function () { say(4, N, 'What needs a person today, with each message drafted in the applicant\'s own language.'); hl('.ops-grid .card'); });
+  later(9500, function () { say(3, N, 'Where applications drop out, and why. Click any step to see who.'); hl('.ops-strip'); });
+  later(15500, function () { say(4, N, 'What needs a person today, with each message drafted in the applicant\'s own language.'); S.tab = 'overview'; D.rerender(); document.documentElement.scrollTop = 0; hl('.ops-grid .card'); });
 
   later(21500, function () {
     var appr = S.apps.filter(function (a) { return outcomeOf(a.id) === 'Approve'; })[0];
-    if (appr) { S.open[appr.id] = true; D.rerender(); }
+    S.tab = 'decisions'; if (appr) S.open[appr.id] = true; D.rerender();
     say(5, N, 'Every partner gets the reason, a score, a training plan in their language and a date to sign by.');
     if (appr) hl('#row-' + appr.id, 'start');
   });
@@ -3079,7 +3183,7 @@ function play() {
             hl('.board');
             later(6000, function () {
               say(9, N, 'Territory Desk: from first application to an open, trained store, without the spreadsheet chase.');
-              hl('.summary');
+              S.tab = 'decisions'; D.rerender(); document.documentElement.scrollTop = 0; hl('.summary');
               later(4500, stop);
             });
           });
@@ -3090,7 +3194,7 @@ function play() {
 }
 
 var btn = document.createElement('button');
-btn.className = 'btn'; btn.setAttribute('data-demo', 'play'); btn.textContent = 'Play demo';
+btn.className = 'btn ghost hide-s'; btn.setAttribute('data-demo', 'play'); btn.textContent = 'Play demo';
 var acts = $('.top .actions'); if (acts) acts.insertBefore(btn, acts.firstChild);
 
 document.addEventListener('click', function (e) {
@@ -3156,7 +3260,7 @@ function tabHtml() {
   }).join('') + '</ul><p class="muted sm">Every override, with its time, is also in the Decision log and the export.</p>' : '<p class="muted sm">No overrides in this session. Any override is logged with its reason and time in the Decision log and the export.</p>';
   var tiers = ['Tier 1', 'Tier 2', 'Tier 3', null], langs = ['Kannada', 'Hindi', 'English', ''];
   var tierOf = function (a) { var r = res[a.id]; return r && r.tier ? r.tier : null; };
-  return '<div class="fr"><h3>Data and fairness</h3>' +
+  return '<div class="fr"><p class="muted sm">Which fields shape a decision, who changed what, where the data goes, and how outcomes split by group.</p>' +
     '<h4 class="mt">What shapes a decision</h4><div class="tscroll"><table class="cmp fr-t"><thead><tr><th>Field in the form</th><th>Can change the outcome?</th><th>How it is used</th></tr></thead><tbody>' +
       FIELDS.map(function (f) { return '<tr><td>' + esc(f[0]) + '</td><td>' + esc(f[1]) + '</td><td>' + esc(f[2]) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
     '<p class="muted sm">The form collects nothing about gender, age, religion or caste, so none of it can enter a decision. The Site finder\'s crowd estimate is not used for decisions either; its overlap check only adds a flag and a suggestion.</p>' +
@@ -3237,18 +3341,18 @@ function overrideHtml(a, r) {
 }
 
 /* ---------- row detail additions ---------- */
-window.DeskExt.afterDetail.push(function (a, r) {
-  var out = '';
-  if (r.outcome === 'Approve') {
-    var p = P.plan(a, r, S.cfg, S.loadedAt || new Date(), S.stages[a.id] || 0, new Date());
-    out += '<h4>Plan back from the target</h4><p>Sign by <b>' + fmt(p.latestSign) + '</b> to open on <b>' + fmt(p.open) + '</b>. ' + esc(p.basis) + '</p>' +
-      (p.atRisk ? '<p class="risk">At risk: ' + esc(p.risks.join('; ')) + '.</p>' : '') +
-      '<p class="muted sm">Stage: ' + esc(P.STAGES[p.stage]) + '. Next: ' + esc(p.next ? p.next.title + ' (' + p.next.owner + ', due ' + fmt(p.next.due) + ')' : 'none') + '. <button class="link" data-act="tab" data-v="onboard">Open the stage board</button></p>';
-  }
+window.DeskExt.afterDetail.push({ group: 'plan', fn: function (a, r) {
+  if (r.outcome !== 'Approve') return '';
+  var p = P.plan(a, r, S.cfg, S.loadedAt || new Date(), S.stages[a.id] || 0, new Date());
+  return '<h4>Plan back from the target</h4><p>Sign by <b>' + fmt(p.latestSign) + '</b> to open on <b>' + fmt(p.open) + '</b>. ' + esc(p.basis) + '</p>' +
+    (p.atRisk ? '<p class="risk">At risk: ' + esc(p.risks.join('; ')) + '.</p>' : '') +
+    '<p class="muted sm">Stage: ' + esc(P.STAGES[p.stage]) + '. Next: ' + esc(p.next ? p.next.title + ' (' + p.next.owner + ', due ' + fmt(p.next.due) + ')' : 'none') + '. <button class="link" data-act="tab" data-v="onboard">Open the stage board</button></p>';
+} });
+window.DeskExt.afterDetail.push(function (a) {
   var t = TR.triggers(S)[a.id];
-  if (t && t.events.length) out += '<h4>Decide again when</h4><ul class="trig">' + t.events.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>' + (t.then ? '<p class="muted sm">Then: ' + esc(t.then) + '.</p>' : '');
-  return out + overrideHtml(a, r);
+  return t && t.events.length ? '<h4>Decide again when</h4><ul class="trig">' + t.events.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>' + (t.then ? '<p class="muted sm">Then: ' + esc(t.then) + '.</p>' : '') : '';
 });
+window.DeskExt.afterDetail.push({ group: 'actions', fn: function (a, r) { return overrideHtml(a, r); } });
 
 /* ---------- Onboarding tab: stage board and backward plans ---------- */
 function onboardHtml() {
@@ -3309,7 +3413,7 @@ function gatesHtml(ps) {
 /* ---------- Decision log tab ---------- */
 function logHtml() {
   var tr = TR.triggers(S), ids = Object.keys(tr);
-  var waiting = ids.length ? '<ul class="wait">' + ids.map(function (id) {
+  var waiting = ids.length ? '<ul class="waitlist-ul">' + ids.map(function (id) {
     var t = tr[id]; return '<li>' + appLink(id) + ' ' + pill(t.outcome, true) + ' <span>' + esc(t.events.join('; or ') || 'No trigger: needs a person') + '</span>' + (t.then ? ' <span class="muted">Then: ' + esc(t.then) + '.</span>' : '') + '</li>';
   }).join('') + '</ul>' : '<p class="muted">Nothing is waiting.</p>';
   var rows = S.log.slice().reverse().map(function (e) {
@@ -3409,7 +3513,7 @@ css.textContent = [
   '.pl { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; margin-bottom: 6px; }',
   '.pl summary { cursor: pointer; font-weight: 600; font-size: 14px; } .pl .cmp { margin-top: 6px; }',
   '.pl .cmp th, .pl .cmp td { text-align: left; }',
-  '.wait { list-style: none; padding: 0; margin: 6px 0; } .wait li { padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }',
+  '.waitlist-ul { list-style: none; padding: 0; margin: 6px 0; } .waitlist-ul li { padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }',
   '.tscroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; }',
   '.cmp.lg td { text-align: left; vertical-align: top; } .cmp.lg td:nth-child(-n+3) { white-space: nowrap; }',
   '.kind { font-size: 12px; font-weight: 600; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; white-space: nowrap; }',
@@ -3529,14 +3633,33 @@ function sync() {
   O.track(S, ev, Date.now());
 }
 
+// Overview page: the full operations view
 function view() {
   if (!S.run) return '';
   sync();
-  return '<section class="ops" aria-label="Operations view"><header class="ops-h"><h2>Operations view</h2><button class="link sm" data-act="ops-toggle">' + (V.open ? 'Hide' : 'Show') + '</button></header>' +
-    (V.open ? pipeHtml() + '<div class="ops-grid">' + workHtml() + healthHtml() + '</div><div class="ops-grid">' + baHtml() + adoptHtml() + '</div>' : '') + '</section>';
+  return '<section class="ops" aria-label="Operations view">' + pipeHtml() + '<div class="ops-grid">' + workHtml() + healthHtml() + '</div><div class="ops-grid">' + baHtml() + adoptHtml() + '</div></section>';
+}
+function todo() { var n = 0; O.worklist(S).forEach(function (g) { n += g.items.length; }); return n; }
+
+// Decisions page: a slim strip with the pipeline and the three things to act on, each linking to its page
+function strip() {
+  if (!S.run) return '';
+  sync();
+  var p = O.pipeline(S), b = O.beforeAfter(S, T), short = O.territoryHealth(S).filter(function (t) { return t.open > 0; });
+  var open = 0; short.forEach(function (t) { open += t.open; });
+  var steps = p.map(function (s, i) {
+    return (i ? '<span class="ps-leak" title="' + esc(s.reasons.map(function (r) { return r.reason + ' (' + r.n + ')'; }).join('; ')) + '">' + (s.leakIds.length ? '−' + s.leakIds.length : '') + '</span>' : '') +
+      '<button class="ps" data-act="ops-ids" data-ids="' + s.ids.join(',') + '" data-label="applications that reached ' + esc(s.label.toLowerCase()) + '"><b>' + s.n + '</b><span>' + esc(s.label) + '</span></button>';
+  }).join('');
+  var go = function (tab, big, label) { return '<button class="oc" data-act="tab" data-v="' + tab + '"><b>' + big + '</b><span>' + label + '</span></button>'; };
+  return '<section class="ops ops-strip" aria-label="Today at a glance"><div class="ps-row">' + steps + '</div><div class="oc-row">' +
+    go('overview', todo(), 'things need a person today') +
+    go(window.DeskPlanner ? 'pipeplan' : 'overview', open, 'open slots in ' + short.length + ' territor' + (short.length === 1 ? 'y' : 'ies')) +
+    go('overview', (Math.round(b.savedHours * 10) / 10) + ' h', 'saved on this file') + '</div></section>';
 }
 
-window.DeskExt.afterSummary.push(view);
+window.DeskExt.afterSummary.push(strip);
+window.DeskExt.tabs.push({ id: 'overview', label: 'Overview', render: view, badge: function () { return S.run ? todo() : ''; } });
 window.DeskExt.afterRender.push(sync);
 
 function copy(text, el) {
@@ -3583,8 +3706,16 @@ document.addEventListener('change', function (e) {
 var css = document.createElement('style');
 css.textContent = [
   '.ops { margin-bottom: 16px; }',
-  '.ops-h { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 2px 10px; }',
-  '.ops-h h2 { font-family: var(--display); font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }',
+  '.ops-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }',
+  '.ps-row { display: flex; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 6px; flex: 1 1 360px; }',
+  '.ps { flex: 1; display: flex; flex-direction: column; align-items: center; border: 0; background: none; border-radius: 8px; padding: 4px 6px; min-width: 0; }',
+  '.ps:hover { background: var(--surface2); } .ps b { font-family: var(--display); font-size: 20px; font-weight: 800; line-height: 1.15; } .ps span { font-size: 12px; color: var(--muted); white-space: nowrap; }',
+  '.ps:last-child b { color: var(--ok); }',
+  '.ps-leak { font-size: 12px; font-weight: 700; color: var(--hold); min-width: 22px; text-align: center; cursor: help; }',
+  '.oc-row { display: flex; gap: 8px; flex: 1 1 420px; }',
+  '.oc { flex: 1; display: flex; flex-direction: column; align-items: flex-start; text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 8px 12px; min-width: 0; }',
+  '.oc:hover { border-color: var(--accent); } .oc b { font-family: var(--display); font-size: 20px; font-weight: 800; line-height: 1.15; } .oc span { font-size: 12.5px; color: var(--muted); }',
+  '@media (max-width: 560px) { .oc { padding: 6px 8px; } .oc b { font-size: 17px; } .oc span { font-size: 11.5px; line-height: 1.25; } .ps span { font-size: 11px; } .ps b { font-size: 17px; } }',
   '.ops .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }',
   '.ops h3 { font-family: var(--display); font-size: 16px; font-weight: 800; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }',
   '.ops .count { font-family: var(--body); font-size: 12.5px; font-weight: 600; background: var(--ink); color: var(--bg); border-radius: 999px; padding: 0 8px; }',
@@ -3655,7 +3786,7 @@ var cfg = JSON.parse(JSON.stringify(PB.DEFAULTS));
 function mo(x) { return x == null ? 'never' : x.toFixed(0) + ' months'; }
 function inp(k, val, label, unit) { return '<label class="pb-in"><span>' + label + '</span><input type="number" step="0.1" min="0" value="' + val + '" data-pb="' + k + '"><small>' + unit + '</small></label>'; }
 
-window.DeskExt.afterDetail.push(function (a, r) {
+window.DeskExt.afterDetail.push({ group: 'plan', fn: function (a, r) {
   if (r.outcome === 'Reject') return '';
   var floor = r.tier ? S.cfg.floors[r.tier] : null, b = PB.band(a, floor, cfg); if (!b) return '';
   var cal = PB.calibration(cfg);
@@ -3667,7 +3798,7 @@ window.DeskExt.afterDetail.push(function (a, r) {
       '<div class="pb-grid">' + inp('sales.best', cfg.sales.best, 'Monthly sales, best', 'Rs lakh') + inp('sales.base', cfg.sales.base, 'Monthly sales, base', 'Rs lakh') + inp('sales.worst', cfg.sales.worst, 'Monthly sales, worst', 'Rs lakh') +
       inp('margin', Math.round(cfg.margin * 100), 'Gross margin', '%') + inp('running', cfg.running, 'Monthly running costs', 'Rs lakh') +
       '<label class="pb-in"><span>Investment to recover</span><select data-pb="invest"><option value="floor"' + (cfg.invest === 'floor' ? ' selected' : '') + '>Store cost for the tier</option><option value="applicant"' + (cfg.invest === 'applicant' ? ' selected' : '') + '>Applicant\'s stated figure</option></select></label></div></details>';
-});
+} });
 
 document.addEventListener('change', function (e) {
   var k = e.target.getAttribute && e.target.getAttribute('data-pb'); if (!k) return;
@@ -3723,7 +3854,7 @@ function tabHtml() {
     return '<li><b>' + esc(r.id) + ' ' + esc(r.city) + '</b> (' + r.priority.toLowerCase() + ' priority): ' + (r.fixable.length ? 'first chase ' + r.fixable.map(esc).join(', ') + ' (a fixable hold that would take the slot); then ' : '') +
       'recruit about ' + (r.needed == null ? 'an unknown number of' : r.needed) + ' applicant' + (r.needed === 1 ? '' : 's') + (r.pins.length ? ', starting in pin' + (r.pins.length > 1 ? 's ' : ' ') + r.pins.slice(0, 3).map(function (x) { return x.pin; }).join(', ') : '') + '.</li>';
   }).join('');
-  return '<div class="pp"><h3>Pipeline plan</h3><p class="muted sm">How many more applicants each territory needs to fill its open slots, using only this file. Highest-priority territories first.</p>' + head +
+  return '<div class="pp"><p class="muted sm">How many more applicants each territory needs to fill its open slots, using only this file. Highest-priority territories first.</p>' + head +
     '<div class="tscroll"><table class="cmp pp-t"><thead><tr><th>Territory</th><th>Open slots</th><th>Applied</th><th>Rate used</th><th>Fixable holds</th><th>New applicants needed</th><th>Per week</th><th>Where to recruit (crowd)</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     (targets ? '<h4 class="mt">Outreach targets</h4><ul class="pp-list">' + targets + '</ul>' : '<p>Every territory is full.</p>') +
     '<details class="sf-box"><summary>Assumptions (editable)</summary><div class="pp-grid">' +
@@ -3857,7 +3988,7 @@ function reportsHtml() {
 }
 window.DeskExt.tabs.push({ id: 'reports', label: 'Reports', render: reportsHtml });
 
-window.DeskExt.afterDetail.push(function (a) { return '<p><button class="btn sm" data-act="rep-memo" data-id="' + esc(a.id) + '">Print decision memo</button></p>'; });
+window.DeskExt.afterDetail.push({ group: 'message', fn: function (a) { return '<button class="btn sm" data-act="rep-memo" data-id="' + esc(a.id) + '">Print decision memo</button>'; } });
 
 document.addEventListener('click', function (e) {
   var el = e.target.closest && e.target.closest('[data-act^="rep-"]'); if (!el) return;
@@ -4017,7 +4148,7 @@ function chipsHtml() {
   return zones.length ? '<div class="sf-chips"><span class="muted sm">Search zones:</span>' + zones.map(function (a) { return '<button class="chip" data-act="geo-app" data-v="' + esc(a.id) + '">' + esc(a.id) + ' ' + esc(a.pin) + ' ' + (S.run.res[a.id].outcome === 'Approve' ? '(approved)' : '(needs a space)') + '</button>'; }).join('') + '</div>' : '';
 }
 function tabHtml() {
-  var head = '<div class="sf-head"><div><h3>Site finder</h3><p class="muted sm">Enter any pin code or place in India to see where inside it to look for a shop, and why.</p></div>' +
+  var head = '<div class="sf-head"><div><p class="muted sm">Enter any pin code or place in India to see where inside it to look for a shop, and why.</p></div>' +
     '<div class="sf-q"><input id="geo-pin" maxlength="60" placeholder="Pin or place, e.g. 575002 or Hosapete" value="' + esc(V.query || V.pin) + '" aria-label="Pin code or place"><button class="btn sm primary" data-act="geo-go">Find sites</button></div></div>' + chipsHtml();
   var body = '', lv = V.query ? live[V.query] : V.pin ? live[V.pin] : null;
   if (lv && lv.state === 'loading') body = '<div class="sf-box sf-wait"><p><b>Looking up ' + esc(V.query || 'pin ' + V.pin) + ' on the live map (OpenStreetMap).</b></p><p class="muted sm">The first lookup of a place can take up to a minute because the public map servers are busy; after that it is instant.</p></div>';
@@ -4035,7 +4166,7 @@ function tabHtml() {
 window.DeskExt.tabs.push({ id: 'sites', label: 'Site finder', render: tabHtml });
 
 /* ---------- entry points elsewhere ---------- */
-window.DeskExt.afterDetail.push(function (a, r) {
+window.DeskExt.afterDetail.push({ group: 'plan', fn: function (a, r) {
   if (!(noSpace(a, r) || r.outcome === 'Approve')) return '';
   var x = rec(a.pin, a.id);
   var h = '<h4>' + (r.outcome === 'Approve' ? 'Recommended search zone' : 'Where to look for a shop') + '</h4>';
@@ -4043,7 +4174,7 @@ window.DeskExt.afterDetail.push(function (a, r) {
   var t = x.top[0];
   return h + '<p>Best hexagon in pin ' + esc(a.pin) + ': ' + esc(t.landmarks[0] ? 'near ' + t.landmarks[0] : 'around ' + t.lat.toFixed(4) + ', ' + t.lon.toFixed(4)) + ' (crowd potential ' + Math.round(t.potential) + ', ' + Math.round(100 * t.overlap) + '% overlap with existing catchments).</p>' +
     '<p><button class="btn sm" data-act="geo-app" data-v="' + esc(a.id) + '">Open in Site finder</button></p>';
-});
+} });
 window.DeskExt.boardTerritory.push(function (t) {
   var open = t.pins.filter(function (p) { return !S.run.ctx.storeByPin[p] && !S.run.approvedPins[p]; });
   if (!open.length) return '';

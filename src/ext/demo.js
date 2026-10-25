@@ -33,7 +33,7 @@ function word(o) { return { Approve: 'approved', Waitlist: 'waitlisted', Hold: '
 function play() {
   stop();
   var N = 9;
-  S.run = null; S.open = {}; D.rerender(); window.scrollTo(0, 0);
+  S.run = null; S.open = {}; D.rerender(); document.documentElement.scrollTop = 0;
   say(1, N, 'The expansion team uploads this week\'s Applications and Territories workbook.');
   hl('.drop');
 
@@ -44,12 +44,12 @@ function play() {
     say(2, N, 'Every application is decided in a second: ' + c.Approve + ' approved, ' + c.Waitlist + ' waitlisted, ' + c.Hold + ' on hold, ' + c.Reject + ' rejected. Never two stores in one pin code.');
     hl('.summary');
   });
-  later(9500, function () { say(3, N, 'Where applications drop out, and why. Click any step to see who.'); hl('.pipe-card'); });
-  later(15500, function () { say(4, N, 'What needs a person today, with each message drafted in the applicant\'s own language.'); hl('.ops-grid .card'); });
+  later(9500, function () { say(3, N, 'Where applications drop out, and why. Click any step to see who.'); hl('.ops-strip'); });
+  later(15500, function () { say(4, N, 'What needs a person today, with each message drafted in the applicant\'s own language.'); S.tab = 'overview'; D.rerender(); document.documentElement.scrollTop = 0; hl('.ops-grid .card'); });
 
   later(21500, function () {
     var appr = S.apps.filter(function (a) { return outcomeOf(a.id) === 'Approve'; })[0];
-    if (appr) { S.open[appr.id] = true; D.rerender(); }
+    S.tab = 'decisions'; if (appr) S.open[appr.id] = true; D.rerender();
     say(5, N, 'Every partner gets the reason, a score, a training plan in their language and a date to sign by.');
     if (appr) hl('#row-' + appr.id, 'start');
   });
@@ -78,7 +78,7 @@ function play() {
             hl('.board');
             later(6000, function () {
               say(9, N, 'Territory Desk: from first application to an open, trained store, without the spreadsheet chase.');
-              hl('.summary');
+              S.tab = 'decisions'; D.rerender(); document.documentElement.scrollTop = 0; hl('.summary');
               later(4500, stop);
             });
           });
@@ -89,7 +89,7 @@ function play() {
 }
 
 var btn = document.createElement('button');
-btn.className = 'btn'; btn.setAttribute('data-demo', 'play'); btn.textContent = 'Play demo';
+btn.className = 'btn ghost hide-s'; btn.setAttribute('data-demo', 'play'); btn.textContent = 'Play demo';
 var acts = $('.top .actions'); if (acts) acts.insertBefore(btn, acts.firstChild);
 
 document.addEventListener('click', function (e) {

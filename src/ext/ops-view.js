@@ -102,14 +102,33 @@ function sync() {
   O.track(S, ev, Date.now());
 }
 
+// Overview page: the full operations view
 function view() {
   if (!S.run) return '';
   sync();
-  return '<section class="ops" aria-label="Operations view"><header class="ops-h"><h2>Operations view</h2><button class="link sm" data-act="ops-toggle">' + (V.open ? 'Hide' : 'Show') + '</button></header>' +
-    (V.open ? pipeHtml() + '<div class="ops-grid">' + workHtml() + healthHtml() + '</div><div class="ops-grid">' + baHtml() + adoptHtml() + '</div>' : '') + '</section>';
+  return '<section class="ops" aria-label="Operations view">' + pipeHtml() + '<div class="ops-grid">' + workHtml() + healthHtml() + '</div><div class="ops-grid">' + baHtml() + adoptHtml() + '</div></section>';
+}
+function todo() { var n = 0; O.worklist(S).forEach(function (g) { n += g.items.length; }); return n; }
+
+// Decisions page: a slim strip with the pipeline and the three things to act on, each linking to its page
+function strip() {
+  if (!S.run) return '';
+  sync();
+  var p = O.pipeline(S), b = O.beforeAfter(S, T), short = O.territoryHealth(S).filter(function (t) { return t.open > 0; });
+  var open = 0; short.forEach(function (t) { open += t.open; });
+  var steps = p.map(function (s, i) {
+    return (i ? '<span class="ps-leak" title="' + esc(s.reasons.map(function (r) { return r.reason + ' (' + r.n + ')'; }).join('; ')) + '">' + (s.leakIds.length ? '−' + s.leakIds.length : '') + '</span>' : '') +
+      '<button class="ps" data-act="ops-ids" data-ids="' + s.ids.join(',') + '" data-label="applications that reached ' + esc(s.label.toLowerCase()) + '"><b>' + s.n + '</b><span>' + esc(s.label) + '</span></button>';
+  }).join('');
+  var go = function (tab, big, label) { return '<button class="oc" data-act="tab" data-v="' + tab + '"><b>' + big + '</b><span>' + label + '</span></button>'; };
+  return '<section class="ops ops-strip" aria-label="Today at a glance"><div class="ps-row">' + steps + '</div><div class="oc-row">' +
+    go('overview', todo(), 'things need a person today') +
+    go(window.DeskPlanner ? 'pipeplan' : 'overview', open, 'open slots in ' + short.length + ' territor' + (short.length === 1 ? 'y' : 'ies')) +
+    go('overview', (Math.round(b.savedHours * 10) / 10) + ' h', 'saved on this file') + '</div></section>';
 }
 
-window.DeskExt.afterSummary.push(view);
+window.DeskExt.afterSummary.push(strip);
+window.DeskExt.tabs.push({ id: 'overview', label: 'Overview', render: view, badge: function () { return S.run ? todo() : ''; } });
 window.DeskExt.afterRender.push(sync);
 
 function copy(text, el) {
@@ -156,8 +175,16 @@ document.addEventListener('change', function (e) {
 var css = document.createElement('style');
 css.textContent = [
   '.ops { margin-bottom: 16px; }',
-  '.ops-h { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 2px 10px; }',
-  '.ops-h h2 { font-family: var(--display); font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }',
+  '.ops-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }',
+  '.ps-row { display: flex; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 6px; flex: 1 1 360px; }',
+  '.ps { flex: 1; display: flex; flex-direction: column; align-items: center; border: 0; background: none; border-radius: 8px; padding: 4px 6px; min-width: 0; }',
+  '.ps:hover { background: var(--surface2); } .ps b { font-family: var(--display); font-size: 20px; font-weight: 800; line-height: 1.15; } .ps span { font-size: 12px; color: var(--muted); white-space: nowrap; }',
+  '.ps:last-child b { color: var(--ok); }',
+  '.ps-leak { font-size: 12px; font-weight: 700; color: var(--hold); min-width: 22px; text-align: center; cursor: help; }',
+  '.oc-row { display: flex; gap: 8px; flex: 1 1 420px; }',
+  '.oc { flex: 1; display: flex; flex-direction: column; align-items: flex-start; text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 8px 12px; min-width: 0; }',
+  '.oc:hover { border-color: var(--accent); } .oc b { font-family: var(--display); font-size: 20px; font-weight: 800; line-height: 1.15; } .oc span { font-size: 12.5px; color: var(--muted); }',
+  '@media (max-width: 560px) { .oc { padding: 6px 8px; } .oc b { font-size: 17px; } .oc span { font-size: 11.5px; line-height: 1.25; } .ps span { font-size: 11px; } .ps b { font-size: 17px; } }',
   '.ops .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }',
   '.ops h3 { font-family: var(--display); font-size: 16px; font-weight: 800; margin-bottom: 2px; display: flex; align-items: center; gap: 8px; }',
   '.ops .count { font-family: var(--body); font-size: 12.5px; font-weight: 600; background: var(--ink); color: var(--bg); border-radius: 999px; padding: 0 8px; }',

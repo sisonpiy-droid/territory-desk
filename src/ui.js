@@ -17,7 +17,7 @@ function extTab(id) { return window.DeskExt.tabs.filter(function (t) { return t.
 
 var S = {
   apps: [], ters: [], cfg: E.clone(E.DEFAULT_CFG), run: null, prevSnap: null, changed: {},
-  notices: [], tab: 'decisions', filter: 'all', q: '', open: {}, letterLang: {}, undo: [], label: '',
+  notices: [], tab: 'decisions', filter: 'all', q: '', open: {}, dtab: {}, letterLang: {}, undo: [], label: '',
   exampleApp: null, exampleTer: null, askLog: []
 };
 
@@ -96,25 +96,65 @@ function addWeeks(w) { var d = new Date(); d.setDate(d.getDate() + w * 7); retur
 /* ------------------------------------------------------------------ */
 /* Rendering                                                           */
 /* ------------------------------------------------------------------ */
+// Sidebar: pages grouped by the job they serve. Pages added by src/ext/* appear where listed here, or under "More".
+var NAV = [
+  ['Today', ['overview', 'decisions', 'board']],
+  ['Plan', ['sites', 'pipeplan', 'scen']],
+  ['Deliver', ['onboard', 'reports']],
+  ['Records', ['log', 'fair', 'assume']]
+];
+var BUILTIN = { decisions: 'Decisions', board: 'Pin board', assume: 'Assumptions' };
+function pages() {
+  var all = {}; Object.keys(BUILTIN).forEach(function (k) { all[k] = { id: k, label: BUILTIN[k] }; });
+  window.DeskExt.tabs.forEach(function (t) { all[t.id] = t; });
+  return all;
+}
 function render() {
   var root = $('#app');
+  document.body.classList.toggle('has-data', !!S.run);
   if (!S.run) { root.innerHTML = emptyState(); return; }
+  if (S.askOpen === undefined) S.askOpen = window.innerWidth >= 1280;
+  var pg = pages()[S.tab] || pages().decisions;
   root.innerHTML =
-    '<section class="workspace">' +
-      '<div class="primary">' + summaryHtml() + noticesHtml() + extHtml() + tabsHtml() + '<div id="tabbody">' + tabBody() + '</div></div>' +
-      '<aside class="ask" id="ask">' + askHtml() + '</aside>' +
-    '</section>';
+    '<div class="shell' + (S.askOpen ? ' ask-open' : '') + '">' +
+      '<nav class="side" aria-label="Pages">' + navHtml() + '</nav>' +
+      '<main class="main" id="main"><header class="page-h"><h1>' + esc(pg.label) + '</h1>' + (S.tab === 'decisions' ? '' : '<span class="muted sm">' + fileLine() + '</span>') + '</header>' +
+        noticesHtml() + (S.tab === 'decisions' ? extHtml() : '') + '<div id="tabbody">' + tabBody() + '</div></main>' +
+      '<aside class="ask" id="ask" aria-label="Ask the desk">' + askHtml() + '</aside>' +
+      '<button class="ask-scrim" data-act="ask-toggle" aria-label="Close Ask the desk" tabindex="-1"></button>' +
+    '</div>';
+  var tb = $('#askbtn'); if (tb) tb.setAttribute('aria-expanded', String(!!S.askOpen));
   scrollAskToEnd();
   window.DeskExt.afterRender.forEach(function (fn) { try { fn(S); } catch (e) { console.error(e); } });
+}
+function fileLine() {
+  var n = S.apps.filter(function (a) { return !a.withdrawn; }).length;
+  return n + ' applications' + (S.label ? ' from ' + esc(S.label) : '');
+}
+function navHtml() {
+  var all = pages(), used = {};
+  var item = function (id) {
+    var p = all[id]; if (!p) return ''; used[id] = 1;
+    var badge = id === 'decisions' ? S.apps.filter(function (a) { return !a.withdrawn; }).length : p.badge ? p.badge(S) : '';
+    return '<button class="nav-i' + (S.tab === id ? ' on' : '') + '" data-act="tab" data-v="' + id + '"' + (S.tab === id ? ' aria-current="page"' : '') + '><span>' + esc(p.label) + '</span>' + (badge !== '' && badge != null ? '<b class="nb">' + esc(badge) + '</b>' : '') + '</button>';
+  };
+  var html = NAV.map(function (g) { var items = g[1].map(item).join(''); return items ? '<div class="nav-g"><p>' + g[0] + '</p>' + items + '</div>' : ''; }).join('');
+  var rest = Object.keys(all).filter(function (id) { return !used[id]; }).map(item).join('');
+  if (rest) html += '<div class="nav-g"><p>More</p>' + rest + '</div>';
+  return html + '<div class="nav-foot"><button class="btn sm" data-act="export">Export to Excel</button><p class="muted sm">' + fileLine() + '</p></div>';
 }
 
 function emptyState() {
   return '<section class="empty">' +
+    '<p class="eyebrow">Franchise partner desk</p>' +
     '<h1>Every franchise application, decided and explained.</h1>' +
-    '<p class="lede">Upload the Applications and Territories workbook. Each partner gets an outcome, the reason, what to do next and a training plan. Pin codes are protected so the brand never opens two stores in one.</p>' +
-    '<div class="drop" id="drop"><strong>Drop the .xlsx here</strong><span>or</span>' +
-      '<label class="btn primary">Choose a file<input type="file" id="file2" accept=".xlsx,.xls" hidden></label>' +
-      '<button class="btn" data-act="sample">Try the sample data</button></div>' +
+    '<p class="lede">Upload the Applications and Territories workbook. Each partner gets an outcome, the reason, what to do next and a training plan. The brand never opens two stores in one pin code.</p>' +
+    '<div class="drop" id="drop"><div class="drop-i" aria-hidden="true"></div><div><strong>Drop the .xlsx file here</strong><span class="muted sm">Applications and Territories sheets, as in the judges\' template</span></div>' +
+      '<div class="drop-b"><label class="btn primary">Choose a file<input type="file" id="file2" accept=".xlsx,.xls" hidden></label>' +
+      '<button class="btn" data-act="sample">Try the sample data</button></div></div>' +
+    '<ol class="steps"><li><b>Upload</b><span>Every application is checked and decided in about a second.</span></li>' +
+      '<li><b>Review</b><span>See why, what is missing, and what needs a person today.</span></li>' +
+      '<li><b>Ask</b><span>Ask why, or tell the desk something new; decisions update.</span></li></ol>' +
     '<p class="fine">Nothing is uploaded anywhere: the workbook is read and decided inside your browser. <button class="link" data-act="dl-sample">Download a sample workbook</button> to see the expected layout.</p>' +
   '</section>';
 }
@@ -127,25 +167,19 @@ function summaryHtml() {
   S.ters.forEach(function (t) { slots += t.slots; filled += Math.min(t.slots, S.run.approvedByTer[t.id] || 0); });
   var locked = 0; S.ters.forEach(function (t) { t.pins.forEach(function (p) { if (S.run.ctx.storeByPin[p]) locked++; }); });
   var bar = OUT.map(function (o) { return counts[o] ? '<i class="seg ' + OUT_CLASS[o] + '" style="flex:' + counts[o] + '" title="' + o + ' ' + counts[o] + '"></i>' : ''; }).join('');
-  var legend = OUT.map(function (o) {
-    return '<button class="leg" data-act="filter" data-v="' + o + '"><span class="dot ' + OUT_CLASS[o] + '"></span><b>' + counts[o] + '</b> ' + { Approve: 'approved', Waitlist: 'waitlisted', Hold: 'on hold', Reject: 'rejected' }[o] + '</button>';
+  var chips = [['all', 'All', total]].concat(OUT.map(function (o) { return [o, { Approve: 'Approved', Waitlist: 'Waitlisted', Hold: 'On hold', Reject: 'Rejected' }[o], counts[o]]; })).map(function (c) {
+    return '<button class="fchip' + (S.filter === c[0] ? ' on' : '') + '" data-act="filter" data-v="' + c[0] + '" aria-pressed="' + (S.filter === c[0]) + '">' + (c[0] === 'all' ? '' : '<span class="dot ' + OUT_CLASS[c[0]] + '"></span>') + c[1] + ' <b>' + c[2] + '</b></button>';
   }).join('');
   return '<div class="summary">' +
-    '<div class="sum-top"><h2>' + total + ' applications' + (S.label ? ' <span class="muted">from ' + esc(S.label) + '</span>' : '') + '</h2>' +
-    '<div class="sum-meta">' + filled + ' of ' + slots + ' territory slots filled. ' + locked + ' pin codes locked by existing stores.' + (gone ? ' ' + gone + ' withdrawn.' : '') + '</div></div>' +
-    '<div class="bar" role="img" aria-label="Outcome split">' + bar + '</div><div class="legend">' + legend + '</div></div>';
+    '<div class="sum-top"><div class="sum-meta"><b>' + total + ' applications</b>' + (S.label ? ' from ' + esc(S.label) : '') + ' · ' + filled + ' of ' + slots + ' slots filled · ' + locked + ' pins locked by existing stores' + (gone ? ' · ' + gone + ' withdrawn' : '') + '</div></div>' +
+    '<div class="bar" role="img" aria-label="Outcome split">' + bar + '</div>' +
+    '<div class="toolbar"><div class="chips" role="group" aria-label="Filter by outcome">' + chips + '</div>' +
+    '<input id="q" class="search" type="search" placeholder="Search ID, name, pin or city" value="' + esc(S.q) + '" aria-label="Search applications"></div></div>';
 }
 
 function noticesHtml() {
   if (!S.notices.length) return '';
-  return '<div class="notices">' + S.notices.map(function (n) { return '<p>' + n + '</p>'; }).join('') + '</div>';
-}
-
-function tabsHtml() {
-  var t = [['decisions', 'Decisions'], ['board', 'Pin board'], ['assume', 'Assumptions']].concat(window.DeskExt.tabs.map(function (x) { return [x.id, x.label]; }));
-  return '<div class="tabs" role="tablist">' + t.map(function (x) {
-    return '<button role="tab" class="tab' + (S.tab === x[0] ? ' on' : '') + '" aria-selected="' + (S.tab === x[0]) + '" data-act="tab" data-v="' + x[0] + '">' + x[1] + '</button>';
-  }).join('') + '<span class="grow"></span><button class="btn sm" data-act="export">Export decisions</button></div>';
+  return '<details class="notices"><summary>' + S.notices.length + ' note' + (S.notices.length > 1 ? 's' : '') + ' about this file</summary>' + S.notices.map(function (n) { return '<p>' + n + '</p>'; }).join('') + '</details>';
 }
 
 function tabBody() {
@@ -158,9 +192,6 @@ function tabBody() {
 /* ---------- Decisions ---------- */
 function decisionsHtml() {
   var q = S.q.trim().toLowerCase();
-  var chips = ['all'].concat(OUT).map(function (o) {
-    return '<button class="chip' + (S.filter === o ? ' on' : '') + '" data-act="filter" data-v="' + o + '">' + (o === 'all' ? 'All' : o) + '</button>';
-  }).join('');
   var rows = S.apps.filter(function (a) {
     var r = S.run.res[a.id], o = a.withdrawn ? 'Withdrawn' : r.outcome;
     if (S.filterIds && S.filterIds.indexOf(a.id) < 0) return false;
@@ -169,9 +200,7 @@ function decisionsHtml() {
     return true;
   }).map(rowHtml).join('');
   var only = S.filterIds ? '<p class="only">Showing ' + esc(S.filterLabel || 'a selection') + ' (' + S.filterIds.length + '). <button class="link" data-act="clear-ids">Show all</button></p>' : '';
-  return only + '<div class="toolbar"><div class="chips">' + chips + '</div>' +
-    '<input id="q" class="search" type="search" placeholder="Search ID, name, pin, city" value="' + esc(S.q) + '" aria-label="Search applications"></div>' +
-    '<div class="rows">' + (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
+  return summaryHtml() + only + '<div class="rows">' + (rows || '<p class="muted pad">No applications match.</p>') + '</div>';
 }
 
 function rowHtml(a) {
@@ -218,13 +247,26 @@ function detailHtml(a, r, x) {
   var rec = [['Investment', a.invest === null ? 'not given' : 'Rs ' + a.invest + ' lakh'], ['Experience', a.exp === null ? 'not given' : a.exp + ' yrs'], ['Business', a.biz || 'not given'],
     ['Space', a.space + (a.size !== null ? ', ' + a.size + ' sq ft' : '') + ', ' + a.floor.toLowerCase()], ['Target launch', a.launch === null ? 'not given' : a.launch + ' months'], ['Training language', a.lang || 'not given'], ['Notes', a.notes || 'none']]
     .map(function (z) { return '<dt>' + z[0] + '</dt><dd>' + esc(z[1]) + '</dd>'; }).join('');
-  var ext = window.DeskExt.afterDetail.map(function (fn) { try { return fn(a, r, S) || ''; } catch (e) { return ''; } }).join('');
-  return '<div class="detail"><div class="dcol"><h4>Why</h4>' + why + next + plan + ext + '</div>' +
-    '<div class="dcol"><h4>' + (r.outcome === 'Hold' || r.outcome === 'Reject' ? 'Indicative score (not ranked)' : 'Score out of 100') + '</h4>' + bars +
-    '<h4>Data flags</h4><ul class="flags">' + flags + '</ul>' +
-    '<h4>Message to the applicant</h4><div class="seg-g">' + langs + '</div><p class="letter" lang="' + (lang === 'Hindi' ? 'hi' : lang === 'Kannada' ? 'kn' : 'en') + '">' + esc(msg) + '</p>' +
-    '<button class="btn sm" data-act="copy" data-id="' + esc(a.id) + '">Copy message</button>' +
-    '<h4>What was submitted</h4><dl class="rec">' + rec + '</dl></div></div>';
+  // extension sections: a function (shown under Why) or { group: 'why'|'plan'|'score'|'message'|'actions', fn }
+  var ext = { why: '', plan: '', score: '', message: '', actions: '' };
+  window.DeskExt.afterDetail.forEach(function (h) {
+    var fn = typeof h === 'function' ? h : h.fn, g = typeof h === 'function' ? 'why' : h.group;
+    try { ext[g] = (ext[g] || '') + (fn(a, r, S) || ''); } catch (e) { /* a failing section never breaks the record */ }
+  });
+  var secs = [
+    ['why', 'Why', '<h4 class="lead-h">' + esc(x.headline) + '</h4>' + why + next + ext.why],
+    ['plan', r.outcome === 'Approve' ? 'Plan' : 'Next steps', plan + ext.plan || '<p class="muted">Nothing to plan until this application is approved.</p>'],
+    ['score', 'Score and data', '<h4>' + (r.outcome === 'Hold' || r.outcome === 'Reject' ? 'Indicative score (not ranked)' : 'Score out of 100') + '</h4>' + bars +
+      '<h4>Data flags</h4><ul class="flags">' + flags + '</ul>' + ext.score + '<h4>What was submitted</h4><dl class="rec">' + rec + '</dl>'],
+    ['message', 'Message', '<div class="seg-g">' + langs + '</div><p class="letter" lang="' + (lang === 'Hindi' ? 'hi' : lang === 'Kannada' ? 'kn' : 'en') + '">' + esc(msg) + '</p>' +
+      '<div class="btn-row"><button class="btn sm primary" data-act="copy" data-id="' + esc(a.id) + '">Copy message</button>' + ext.message + '</div>'],
+    ['actions', 'Override', ext.actions || '<p class="muted">No actions available.</p>']
+  ];
+  var cur = S.dtab[a.id] || 'why';
+  if (!secs.some(function (s) { return s[0] === cur; })) cur = 'why';
+  return '<div class="detail"><div class="dtabs" role="tablist">' + secs.map(function (s) {
+      return '<button role="tab" class="dtab' + (cur === s[0] ? ' on' : '') + '" aria-selected="' + (cur === s[0]) + '" data-act="dtab" data-id="' + esc(a.id) + '" data-v="' + s[0] + '">' + s[1] + '</button>';
+    }).join('') + '</div><div class="dbody" role="tabpanel">' + secs.filter(function (s) { return s[0] === cur; })[0][2] + '</div></div>';
 }
 
 /* ---------- Pin board ---------- */
@@ -311,10 +353,11 @@ function askHtml() {
   var log = S.askLog.map(function (m) {
     return m.who === 'me' ? '<div class="msg me">' + esc(m.text) + '</div>' : '<div class="msg desk">' + m.html + '</div>';
   }).join('');
-  return '<div class="ask-in"><header><h2>Ask the desk</h2><p class="muted sm">Ask why, or tell it something new. Decisions update right away.</p></header>' +
-    '<div class="log" id="log" aria-live="polite">' + (log || '<div class="msg desk">Try one of these, or type your own question.</div>') + '</div>' +
-    '<div class="sugg">' + sugg.slice(0, 5).map(function (s) { return '<button class="chip" data-act="sugg" data-v="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div>' +
-    '<div class="composer"><input id="askin" type="text" placeholder="e.g. APP-012 has found a 400 sq ft ground-floor shop" autocomplete="off" aria-label="Ask a question or give new information"><button class="btn primary" data-act="ask">Ask</button></div>' +
+  return '<div class="ask-in"><header><div><h2>Ask the desk</h2><p class="muted sm">Ask why, or tell it something new. Decisions update right away.</p></div>' +
+      '<button class="icon-b" data-act="ask-toggle" aria-label="Close Ask the desk" title="Close">×</button></header>' +
+    '<div class="log' + (log ? '' : ' is-empty') + '" id="log" aria-live="polite">' + (log || '<div class="ask-empty"><p>Plain language works. For example:</p></div>') + '</div>' +
+    '<div class="sugg">' + sugg.slice(0, log ? 3 : 5).map(function (s) { return '<button class="chip" data-act="sugg" data-v="' + esc(s) + '">' + esc(s) + '</button>'; }).join('') + '</div>' +
+    '<div class="composer"><input id="askin" type="text" placeholder="Ask a question or give new information" autocomplete="off" aria-label="Ask a question or give new information"><button class="btn primary" data-act="ask">Ask</button></div>' +
     '<div class="ask-tools"><button class="link" data-act="undo"' + (S.undo.length ? '' : ' disabled') + '>Undo last change</button><button class="link" data-act="reset-data">Restore uploaded data</button></div></div>';
 }
 function firstOf(o) { var a = S.apps.filter(function (x) { return !x.withdrawn && S.run.res[x.id] && S.run.res[x.id].outcome === o; })[0]; return a ? a.id : ''; }
@@ -575,9 +618,10 @@ function ask(text) {
   try { html = answer(text); } catch (e) { html = '<p>Something went wrong reading that: ' + esc(e.message) + '</p>'; }
   S.cause = null;
   S.askLog.push({ who: 'desk', html: html });
+  if (!S.askOpen) { S.askOpen = true; var sh = $('.shell'); if (sh) sh.classList.add('ask-open'); }   // an answer is always visible
   var asideEl = $('#ask'); if (asideEl) asideEl.innerHTML = askHtml();
   scrollAskToEnd();
-  var inp = $('#askin'); if (inp) inp.focus();
+  var inp = $('#askin'); if (inp && window.innerWidth >= 900) inp.focus();
 }
 
 /* ------------------------------------------------------------------ */
@@ -649,7 +693,9 @@ document.addEventListener('click', function (e) {
     case 'sample': load(SD.appsAoA, SD.tersAoA, 'sample data'); break;
     case 'dl-sample': downloadSample(); break;
     case 'export': exportDecisions(); break;
-    case 'tab': S.tab = v; render(); break;
+    case 'tab': S.tab = v; if (window.innerWidth < 1280) S.askOpen = false; render(); document.documentElement.scrollTop = 0; break;
+    case 'dtab': S.dtab[el.getAttribute('data-id')] = v; refreshBody(); break;
+    case 'ask-toggle': S.askOpen = !S.askOpen; render(); if (S.askOpen) { var ai = $('#askin'); if (ai) ai.focus(); } break;
     case 'clear-ids': S.filterIds = null; refreshBody(); break;
     case 'filter': S.filterIds = null; S.filter = v; S.tab = 'decisions'; render(); break;
     case 'toggle': S.open[v] = !S.open[v]; refreshBody(); break;
@@ -662,7 +708,7 @@ document.addEventListener('click', function (e) {
       else { var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (x) {} document.body.removeChild(ta); done(); }
       break; }
     case 'pin': S.filterIds = null; S.tab = 'decisions'; S.filter = 'all'; S.q = v; render(); break;
-    case 'open-app': S.filterIds = null; S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.open[v] = true; render();
+    case 'open-app': S.filterIds = null; S.tab = 'decisions'; S.filter = 'all'; S.q = ''; S.open[v] = true; if (window.innerWidth < 1280) S.askOpen = false; render();
       var row = document.getElementById('row-' + v); if (row) row.scrollIntoView({ behavior: 'smooth', block: 'start' }); break;
     case 'ask': { var i = $('#askin'); ask(i.value); break; }
     case 'sugg': ask(v); break;

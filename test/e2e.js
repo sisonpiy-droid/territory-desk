@@ -33,9 +33,11 @@ const files = {
         console.log('  ok  ', label, path.basename(f), '->', exp.rows, 'decisions in', Date.now() - t0, 'ms');
       }
     }
+    if (!(await p.locator('#askin').isVisible())) await p.click('#askbtn');   // on a phone, Ask the desk opens from the top bar
     await p.locator('#askin').fill('APP-012 has now found a ground-floor space'); await p.locator('#askin').press('Enter');
     await p.setInputFiles('#file', path.join(__dirname, '../test-data/sample-judges-layout.xlsx'));
     await p.waitForFunction(() => document.querySelectorAll('.row').length === 20);
+    if (!(await p.locator('#askin').isVisible())) await p.click('#askbtn');
     await p.locator('#askin').fill('APP-012 has now found a ground-floor space'); await p.locator('#askin').press('Enter');
     assert(/Hold\s*to\s*Approve/.test(await p.locator('.msg.desk').last().innerText()), 'follow-up works after uploads');
     assert.deepStrictEqual(errs, [], label + ' page errors');

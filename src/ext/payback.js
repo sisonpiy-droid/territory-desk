@@ -6,7 +6,7 @@ var cfg = JSON.parse(JSON.stringify(PB.DEFAULTS));
 function mo(x) { return x == null ? 'never' : x.toFixed(0) + ' months'; }
 function inp(k, val, label, unit) { return '<label class="pb-in"><span>' + label + '</span><input type="number" step="0.1" min="0" value="' + val + '" data-pb="' + k + '"><small>' + unit + '</small></label>'; }
 
-window.DeskExt.afterDetail.push(function (a, r) {
+window.DeskExt.afterDetail.push({ group: 'plan', fn: function (a, r) {
   if (r.outcome === 'Reject') return '';
   var floor = r.tier ? S.cfg.floors[r.tier] : null, b = PB.band(a, floor, cfg); if (!b) return '';
   var cal = PB.calibration(cfg);
@@ -18,7 +18,7 @@ window.DeskExt.afterDetail.push(function (a, r) {
       '<div class="pb-grid">' + inp('sales.best', cfg.sales.best, 'Monthly sales, best', 'Rs lakh') + inp('sales.base', cfg.sales.base, 'Monthly sales, base', 'Rs lakh') + inp('sales.worst', cfg.sales.worst, 'Monthly sales, worst', 'Rs lakh') +
       inp('margin', Math.round(cfg.margin * 100), 'Gross margin', '%') + inp('running', cfg.running, 'Monthly running costs', 'Rs lakh') +
       '<label class="pb-in"><span>Investment to recover</span><select data-pb="invest"><option value="floor"' + (cfg.invest === 'floor' ? ' selected' : '') + '>Store cost for the tier</option><option value="applicant"' + (cfg.invest === 'applicant' ? ' selected' : '') + '>Applicant\'s stated figure</option></select></label></div></details>';
-});
+} });
 
 document.addEventListener('change', function (e) {
   var k = e.target.getAttribute && e.target.getAttribute('data-pb'); if (!k) return;

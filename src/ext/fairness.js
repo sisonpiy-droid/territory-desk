@@ -38,7 +38,7 @@ function tabHtml() {
   }).join('') + '</ul><p class="muted sm">Every override, with its time, is also in the Decision log and the export.</p>' : '<p class="muted sm">No overrides in this session. Any override is logged with its reason and time in the Decision log and the export.</p>';
   var tiers = ['Tier 1', 'Tier 2', 'Tier 3', null], langs = ['Kannada', 'Hindi', 'English', ''];
   var tierOf = function (a) { var r = res[a.id]; return r && r.tier ? r.tier : null; };
-  return '<div class="fr"><h3>Data and fairness</h3>' +
+  return '<div class="fr"><p class="muted sm">Which fields shape a decision, who changed what, where the data goes, and how outcomes split by group.</p>' +
     '<h4 class="mt">What shapes a decision</h4><div class="tscroll"><table class="cmp fr-t"><thead><tr><th>Field in the form</th><th>Can change the outcome?</th><th>How it is used</th></tr></thead><tbody>' +
       FIELDS.map(function (f) { return '<tr><td>' + esc(f[0]) + '</td><td>' + esc(f[1]) + '</td><td>' + esc(f[2]) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
     '<p class="muted sm">The form collects nothing about gender, age, religion or caste, so none of it can enter a decision. The Site finder\'s crowd estimate is not used for decisions either; its overlap check only adds a flag and a suggestion.</p>' +
