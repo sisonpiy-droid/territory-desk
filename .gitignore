@@ -5,3 +5,4 @@ shots/
 .env*
 dist/xlsx.full.min.js
 scripts/raw/
+dist/gsap.min.js

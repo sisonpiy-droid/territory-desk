@@ -12,5 +12,5 @@ let html = fs.readFileSync(dir('template.html'), 'utf8').replace('/*SCRIPTS*/', 
 fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'dist', 'index.html'), html);
 // SheetJS is served from the same site, never a CDN
-fs.copyFileSync(path.join(__dirname, 'vendor', 'xlsx.full.min.js'), path.join(__dirname, 'dist', 'xlsx.full.min.js'));
+['xlsx.full.min.js', 'gsap.min.js'].forEach(f => fs.copyFileSync(path.join(__dirname, 'vendor', f), path.join(__dirname, 'dist', f)));
 console.log('built dist/index.html from ' + order.join(', ') + ' (' + html.length + ' bytes)');
