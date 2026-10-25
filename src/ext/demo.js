@@ -44,8 +44,8 @@ function play() {
     say(2, N, 'Every application is decided in a second: ' + c.Approve + ' approved, ' + c.Waitlist + ' waitlisted, ' + c.Hold + ' on hold, ' + c.Reject + ' rejected. Never two stores in one pin code.');
     hl('.summary');
   });
-  later(9500, function () { say(3, N, 'Where applications drop out, and why. Click any step to see who.'); hl('.ops-strip'); });
-  later(15500, function () { say(4, N, 'What needs a person today, with each message drafted in the applicant\'s own language.'); S.tab = 'overview'; D.rerender(); document.documentElement.scrollTop = 0; hl('.ops-grid .card'); });
+  later(9500, function () { S.tab = 'overview'; D.rerender(); document.documentElement.scrollTop = 0; say(3, N, 'Where applications drop out, and why. Click any bar to see who.'); hl('.pipe-card'); });
+  later(15500, function () { say(4, N, 'What needs a person today, with each message drafted in the applicant\'s own language.'); hl('.ops-grid .card'); });
 
   later(21500, function () {
     var appr = S.apps.filter(function (a) { return outcomeOf(a.id) === 'Approve'; })[0];
